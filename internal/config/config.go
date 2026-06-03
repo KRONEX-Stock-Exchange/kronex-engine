@@ -15,10 +15,11 @@ type MySQL struct {
 }
 
 type RabbitMQ struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	PrefetchCount int
 }
 
 type Config struct {
@@ -37,6 +38,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	prefetch, err := envInt("RABBITMQ_PREFETCH_COUNT", 256)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		MySQL: MySQL{
 			Host:     env("MYSQL_HOST", "127.0.0.1"),
@@ -46,10 +52,11 @@ func Load() (Config, error) {
 			Database: env("MYSQL_DATABASE", "stock"),
 		},
 		RabbitMQ: RabbitMQ{
-			Host:     env("RABBITMQ_HOST", "127.0.0.1"),
-			Port:     rabbitPort,
-			User:     env("RABBITMQ_USER", "guest"),
-			Password: env("RABBITMQ_PASSWORD", "guest"),
+			Host:          env("RABBITMQ_HOST", "127.0.0.1"),
+			Port:          rabbitPort,
+			User:          env("RABBITMQ_USER", "guest"),
+			Password:      env("RABBITMQ_PASSWORD", "guest"),
+			PrefetchCount: prefetch,
 		},
 	}, nil
 }

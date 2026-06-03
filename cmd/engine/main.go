@@ -7,6 +7,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/config"
+	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/core"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/messaging"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/storage"
 )
@@ -38,4 +39,7 @@ func main() {
 	defer mq.Close()
 
 	log.Printf("connected to RabbitMQ at %s:%d", cfg.RabbitMQ.Host, cfg.RabbitMQ.Port)
+
+	engine := core.NewEngine(mq)
+	_ = engine
 }
