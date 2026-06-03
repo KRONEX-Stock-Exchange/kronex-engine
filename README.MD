@@ -94,7 +94,7 @@ Kronex 거래소의 Go 기반 엔진입니다.
 
 ### Error Process Rules
 
-| 상황                       | 처리                                                 |
+| Scenario                   | Handling                                             |
 | -------------------------- | ---------------------------------------------------- |
 | Input·Output WAL 쓰기 실패 | Throw                                                |
 | 매칭 중 Panic              | Throw                                                |
