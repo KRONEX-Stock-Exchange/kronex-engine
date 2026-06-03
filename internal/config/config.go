@@ -14,12 +14,25 @@ type MySQL struct {
 	Database string
 }
 
+type RabbitMQ struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+}
+
 type Config struct {
-	MySQL MySQL
+	MySQL    MySQL
+	RabbitMQ RabbitMQ
 }
 
 func Load() (Config, error) {
-	port, err := envInt("MYSQL_PORT", 3306)
+	mysqlPort, err := envInt("MYSQL_PORT", 3306)
+	if err != nil {
+		return Config{}, err
+	}
+
+	rabbitPort, err := envInt("RABBITMQ_PORT", 5672)
 	if err != nil {
 		return Config{}, err
 	}
@@ -27,10 +40,16 @@ func Load() (Config, error) {
 	return Config{
 		MySQL: MySQL{
 			Host:     env("MYSQL_HOST", "127.0.0.1"),
-			Port:     port,
+			Port:     mysqlPort,
 			User:     env("MYSQL_USER", "root"),
 			Password: env("MYSQL_PASSWORD", "1234"),
 			Database: env("MYSQL_DATABASE", "stock"),
+		},
+		RabbitMQ: RabbitMQ{
+			Host:     env("RABBITMQ_HOST", "127.0.0.1"),
+			Port:     rabbitPort,
+			User:     env("RABBITMQ_USER", "guest"),
+			Password: env("RABBITMQ_PASSWORD", "guest"),
 		},
 	}, nil
 }

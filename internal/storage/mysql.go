@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/KRONEX-Stock-Exchange/kronex-matching-server-go/internal/config"
+	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/config"
 )
 
 const (
