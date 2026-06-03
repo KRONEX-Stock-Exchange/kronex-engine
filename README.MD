@@ -80,7 +80,7 @@ Kronex 거래소의 Go 기반 엔진입니다.
 ### Snapshot
 
 - 5분 간격으로 엔진 고루틴 처리 사이에 상태를 직렬화 하고, 데이터를 별도 고루틴이 받아 DB에 기록합니다.
-- 스냅샷에는 엔진 상태(`호가창 및 원장` + `lastProcessedOrderId` + `lastProcessedTransferId` + `lastEventId` + `(Input WAL Index)`를 저장합니다.
+- 스냅샷에는 엔진 상태(`호가창 및 원장` + `lastProcessedOrderId` + `lastProcessedTransferId` + `lastEventId (Input WAL Index)`를 저장합니다.
 - 로그 무한 증식 방지를 위해 이미 스냅샷에 반영된 로그는 Truncate합니다.
   - Input WAL: Input WAL Index 까지 Truncate
   - Output WAL: DB Cursor와 MQ Cursor 중 더 뒤처진 쪽, 즉 min(DBCursor, MQCursor)까지 Truncate
