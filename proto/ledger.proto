@@ -9,6 +9,7 @@ message LedgerSnapshot {
   repeated Account accounts = 2;
   repeated StockBalance stock_balances = 3;
   repeated Stock stocks = 4;
+  repeated OrderBook order_books = 5;
 }
 
 message Account {
@@ -30,4 +31,21 @@ message Stock {
   int32 id = 1;
   uint64 price = 2;
   uint32 status = 3; // domain.StockStatus
+}
+
+message OrderBook {
+  int32 stock_id = 1;
+  repeated Order orders = 2;
+}
+
+message Order {
+  int64 id = 1;
+  int64 target_id = 2;
+  int32 account_id = 3;
+  int32 stock_id = 4;
+  uint64 price = 5;
+  uint64 quantity = 6;
+  uint64 filled_quantity = 7;
+  uint32 order_type = 8;   // domain.OrderType
+  uint32 trading_type = 9; // domain.TradingType
 }
