@@ -22,9 +22,14 @@ type RabbitMQ struct {
 	PrefetchCount int
 }
 
+type WAL struct {
+	Dir string
+}
+
 type Config struct {
 	MySQL    MySQL
 	RabbitMQ RabbitMQ
+	WAL      WAL
 }
 
 func Load() (Config, error) {
@@ -57,6 +62,9 @@ func Load() (Config, error) {
 			User:          env("RABBITMQ_USER", "guest"),
 			Password:      env("RABBITMQ_PASSWORD", "guest"),
 			PrefetchCount: prefetch,
+		},
+		WAL: WAL{
+			Dir: env("WAL_DIR", "./data/wal"),
 		},
 	}, nil
 }
