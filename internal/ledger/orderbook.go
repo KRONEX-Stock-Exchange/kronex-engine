@@ -9,9 +9,11 @@ import (
 )
 
 // NOTE: FIFO 원칙을 지키기 위해 반듯이 PushBack, ReadFront 해야합니다.
+// NOTE/TODO: 외부에서 buy, sell 필드를 직접 수정할 경우 정합성이 깨질 수 있어 비공개 필드로 전환 함
+// 추후 매칭엔진에서 주문을 조회 하고 처리 할 수 있도록 하는 함수 추가 필요
 type OrderBook struct {
-	Buy   map[uint64]*list.List // Price -> Order Nodes -> Order Node
-	Sell  map[uint64]*list.List
+	buy   map[uint64]*list.List // Price -> Order Nodes -> Order Node
+	sell  map[uint64]*list.List
 	index map[int64]*orderRef // Order Id -> Order Node
 }
 
@@ -23,17 +25,17 @@ type orderRef struct {
 
 func NewOrderBook() *OrderBook {
 	return &OrderBook{
-		Buy:   make(map[uint64]*list.List),
-		Sell:  make(map[uint64]*list.List),
+		buy:   make(map[uint64]*list.List),
+		sell:  make(map[uint64]*list.List),
 		index: make(map[int64]*orderRef),
 	}
 }
 
 // NOTE: Order 복사로 Orderbook으로 소유권 이전
 func (b *OrderBook) Add(order domain.Order) {
-	side := b.Buy
+	side := b.buy
 	if order.TradingType == domain.TRADING_SELL {
-		side = b.Sell
+		side = b.sell
 	}
 
 	queue, ok := side[order.Price]
@@ -50,9 +52,9 @@ func (b *OrderBook) Cancel(orderId int64) bool {
 	if !ok {
 		return false // 이미 체결/취소됨
 	}
-	side := b.Buy
+	side := b.buy
 	if ref.tradingType == domain.TRADING_SELL {
-		side = b.Sell
+		side = b.sell
 	}
 
 	// 주문삭제
@@ -92,10 +94,10 @@ func (b *OrderBooks) Get(stockId int32) *OrderBook {
 //
 // 만약 아래와 같은 상황일때 함수 내부 주석과 같이 동작합니다.
 /*
-	b.Buy   (매수)
+	b.buy   (매수)
 	├ 100원 → [id1] ⇄ [id2] (FIFO)
 	└  99원 → [id3]
-	b.Sell  (매도)
+	b.sell  (매도)
 	└ 105원 → [id4]
 
 	Result -> [id3, id1, id2, id4]
@@ -105,7 +107,7 @@ func (b *OrderBooks) Get(stockId int32) *OrderBook {
 func (b *OrderBook) orders() []*domain.Order {
 	out := make([]*domain.Order, 0, len(b.index))
 
-	for _, side := range []map[uint64]*list.List{b.Buy, b.Sell} {
+	for _, side := range []map[uint64]*list.List{b.buy, b.sell} {
 		prices := make([]uint64, 0, len(side))
 
 		// Buy Key 저장 [100, 99]
