@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package ledger;
+
+option go_package = "github.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb;ledgerpb";
+
+message LedgerSnapshot {
+  uint32 version = 1;
+  repeated Account accounts = 2;
+  repeated StockBalance stock_balances = 3;
+  repeated Stock stocks = 4;
+}
+
+message Account {
+  int32 id = 1;
+  uint64 balance = 2;
+  uint64 available_balance = 3;
+}
+
+message StockBalance {
+  int32 account_id = 1;
+  int32 stock_id = 2;
+  uint64 quantity = 3;
+  uint64 available_quantity = 4;
+  uint64 average = 5;
+  uint64 total_buy_amount = 6;
+}
+
+message Stock {
+  int32 id = 1;
+  uint64 price = 2;
+  uint32 status = 3; // domain.StockStatus
+}
