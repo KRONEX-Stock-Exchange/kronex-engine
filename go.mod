@@ -7,6 +7,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.11.0
 	github.com/tidwall/wal v1.2.1
+	google.golang.org/protobuf v1.36.11
 )
 
 require (

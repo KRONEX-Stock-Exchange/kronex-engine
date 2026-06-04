@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package ledger;
+
+option go_package = "github.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb;ledgerpb";
+
+message LedgerSnapshot {
+  uint32 version = 1;
+}

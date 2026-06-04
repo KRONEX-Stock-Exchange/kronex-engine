@@ -26,3 +26,6 @@ up:
 
 down:
 	docker compose down
+	
+proto:
+	protoc --go_out=. --go_opt=module=github.com/KRONEX-Stock-Exchange/kronex-engine proto/ledger.proto
