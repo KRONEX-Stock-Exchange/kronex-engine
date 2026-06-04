@@ -3,9 +3,9 @@ package domain
 type StockStatus uint8
 
 const (
-	StockListed StockStatus = iota
-	StockSuspended
-	StockDelisted
+	LISTED StockStatus = iota
+	SUSPENDED
+	DELISTED
 )
 
 type Stock struct {

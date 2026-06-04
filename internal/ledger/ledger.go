@@ -14,6 +14,7 @@ type State struct {
 	Accounts      *Accounts
 	StockBalances *StockBalances
 	Stocks        *Stocks
+	OrderBooks    *OrderBooks
 }
 
 func NewState() *State {
@@ -21,6 +22,7 @@ func NewState() *State {
 		Accounts:      NewAccounts(),
 		StockBalances: NewStockBalances(),
 		Stocks:        NewStocks(),
+		OrderBooks:    NewOrderBooks(),
 	}
 }
 
@@ -31,6 +33,7 @@ func (s *State) Serialize() ([]byte, error) {
 		Accounts:      s.Accounts.toProto(),
 		StockBalances: s.StockBalances.toProto(),
 		Stocks:        s.Stocks.toProto(),
+		OrderBooks:    s.OrderBooks.toProto(),
 	}
 
 	data, err := proto.Marshal(snap)
@@ -59,6 +62,9 @@ func (s *State) Restore(data []byte) error {
 	}
 	if err := s.Stocks.fromProto(snap.Stocks); err != nil {
 		return fmt.Errorf("restore stocks: %w", err)
+	}
+	if err := s.OrderBooks.fromProto(snap.OrderBooks); err != nil {
+		return fmt.Errorf("restore order books: %w", err)
 	}
 	return nil
 }

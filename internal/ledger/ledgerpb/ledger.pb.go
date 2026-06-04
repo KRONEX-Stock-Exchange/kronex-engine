@@ -27,6 +27,7 @@ type LedgerSnapshot struct {
 	Accounts      []*Account             `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty"`
 	StockBalances []*StockBalance        `protobuf:"bytes,3,rep,name=stock_balances,json=stockBalances,proto3" json:"stock_balances,omitempty"`
 	Stocks        []*Stock               `protobuf:"bytes,4,rep,name=stocks,proto3" json:"stocks,omitempty"`
+	OrderBooks    []*OrderBook           `protobuf:"bytes,5,rep,name=order_books,json=orderBooks,proto3" json:"order_books,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,6 +86,13 @@ func (x *LedgerSnapshot) GetStockBalances() []*StockBalance {
 func (x *LedgerSnapshot) GetStocks() []*Stock {
 	if x != nil {
 		return x.Stocks
+	}
+	return nil
+}
+
+func (x *LedgerSnapshot) GetOrderBooks() []*OrderBook {
+	if x != nil {
+		return x.OrderBooks
 	}
 	return nil
 }
@@ -293,16 +301,178 @@ func (x *Stock) GetStatus() uint32 {
 	return 0
 }
 
+type OrderBook struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StockId       int32                  `protobuf:"varint,1,opt,name=stock_id,json=stockId,proto3" json:"stock_id,omitempty"`
+	Orders        []*Order               `protobuf:"bytes,2,rep,name=orders,proto3" json:"orders,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrderBook) Reset() {
+	*x = OrderBook{}
+	mi := &file_proto_ledger_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrderBook) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderBook) ProtoMessage() {}
+
+func (x *OrderBook) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ledger_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderBook.ProtoReflect.Descriptor instead.
+func (*OrderBook) Descriptor() ([]byte, []int) {
+	return file_proto_ledger_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *OrderBook) GetStockId() int32 {
+	if x != nil {
+		return x.StockId
+	}
+	return 0
+}
+
+func (x *OrderBook) GetOrders() []*Order {
+	if x != nil {
+		return x.Orders
+	}
+	return nil
+}
+
+type Order struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	TargetId       int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	AccountId      int32                  `protobuf:"varint,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	StockId        int32                  `protobuf:"varint,4,opt,name=stock_id,json=stockId,proto3" json:"stock_id,omitempty"`
+	Price          uint64                 `protobuf:"varint,5,opt,name=price,proto3" json:"price,omitempty"`
+	Quantity       uint64                 `protobuf:"varint,6,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	FilledQuantity uint64                 `protobuf:"varint,7,opt,name=filled_quantity,json=filledQuantity,proto3" json:"filled_quantity,omitempty"`
+	OrderType      uint32                 `protobuf:"varint,8,opt,name=order_type,json=orderType,proto3" json:"order_type,omitempty"`       // domain.OrderType
+	TradingType    uint32                 `protobuf:"varint,9,opt,name=trading_type,json=tradingType,proto3" json:"trading_type,omitempty"` // domain.TradingType
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *Order) Reset() {
+	*x = Order{}
+	mi := &file_proto_ledger_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Order) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Order) ProtoMessage() {}
+
+func (x *Order) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ledger_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Order.ProtoReflect.Descriptor instead.
+func (*Order) Descriptor() ([]byte, []int) {
+	return file_proto_ledger_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Order) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Order) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *Order) GetAccountId() int32 {
+	if x != nil {
+		return x.AccountId
+	}
+	return 0
+}
+
+func (x *Order) GetStockId() int32 {
+	if x != nil {
+		return x.StockId
+	}
+	return 0
+}
+
+func (x *Order) GetPrice() uint64 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+func (x *Order) GetQuantity() uint64 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+func (x *Order) GetFilledQuantity() uint64 {
+	if x != nil {
+		return x.FilledQuantity
+	}
+	return 0
+}
+
+func (x *Order) GetOrderType() uint32 {
+	if x != nil {
+		return x.OrderType
+	}
+	return 0
+}
+
+func (x *Order) GetTradingType() uint32 {
+	if x != nil {
+		return x.TradingType
+	}
+	return 0
+}
+
 var File_proto_ledger_proto protoreflect.FileDescriptor
 
 const file_proto_ledger_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/ledger.proto\x12\x06ledger\"\xbb\x01\n" +
+	"\x12proto/ledger.proto\x12\x06ledger\"\xef\x01\n" +
 	"\x0eLedgerSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12+\n" +
 	"\baccounts\x18\x02 \x03(\v2\x0f.ledger.AccountR\baccounts\x12;\n" +
 	"\x0estock_balances\x18\x03 \x03(\v2\x14.ledger.StockBalanceR\rstockBalances\x12%\n" +
-	"\x06stocks\x18\x04 \x03(\v2\r.ledger.StockR\x06stocks\"`\n" +
+	"\x06stocks\x18\x04 \x03(\v2\r.ledger.StockR\x06stocks\x122\n" +
+	"\vorder_books\x18\x05 \x03(\v2\x11.ledger.OrderBookR\n" +
+	"orderBooks\"`\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x18\n" +
 	"\abalance\x18\x02 \x01(\x04R\abalance\x12+\n" +
@@ -318,7 +488,22 @@ const file_proto_ledger_proto_rawDesc = "" +
 	"\x05Stock\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
 	"\x05price\x18\x02 \x01(\x04R\x05price\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\rR\x06statusBRZPgithub.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb;ledgerpbb\x06proto3"
+	"\x06status\x18\x03 \x01(\rR\x06status\"M\n" +
+	"\tOrderBook\x12\x19\n" +
+	"\bstock_id\x18\x01 \x01(\x05R\astockId\x12%\n" +
+	"\x06orders\x18\x02 \x03(\v2\r.ledger.OrderR\x06orders\"\x8b\x02\n" +
+	"\x05Order\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
+	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x03 \x01(\x05R\taccountId\x12\x19\n" +
+	"\bstock_id\x18\x04 \x01(\x05R\astockId\x12\x14\n" +
+	"\x05price\x18\x05 \x01(\x04R\x05price\x12\x1a\n" +
+	"\bquantity\x18\x06 \x01(\x04R\bquantity\x12'\n" +
+	"\x0ffilled_quantity\x18\a \x01(\x04R\x0efilledQuantity\x12\x1d\n" +
+	"\n" +
+	"order_type\x18\b \x01(\rR\torderType\x12!\n" +
+	"\ftrading_type\x18\t \x01(\rR\vtradingTypeBRZPgithub.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb;ledgerpbb\x06proto3"
 
 var (
 	file_proto_ledger_proto_rawDescOnce sync.Once
@@ -332,22 +517,26 @@ func file_proto_ledger_proto_rawDescGZIP() []byte {
 	return file_proto_ledger_proto_rawDescData
 }
 
-var file_proto_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_ledger_proto_goTypes = []any{
 	(*LedgerSnapshot)(nil), // 0: ledger.LedgerSnapshot
 	(*Account)(nil),        // 1: ledger.Account
 	(*StockBalance)(nil),   // 2: ledger.StockBalance
 	(*Stock)(nil),          // 3: ledger.Stock
+	(*OrderBook)(nil),      // 4: ledger.OrderBook
+	(*Order)(nil),          // 5: ledger.Order
 }
 var file_proto_ledger_proto_depIdxs = []int32{
 	1, // 0: ledger.LedgerSnapshot.accounts:type_name -> ledger.Account
 	2, // 1: ledger.LedgerSnapshot.stock_balances:type_name -> ledger.StockBalance
 	3, // 2: ledger.LedgerSnapshot.stocks:type_name -> ledger.Stock
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 3: ledger.LedgerSnapshot.order_books:type_name -> ledger.OrderBook
+	5, // 4: ledger.OrderBook.orders:type_name -> ledger.Order
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proto_ledger_proto_init() }
@@ -361,7 +550,7 @@ func file_proto_ledger_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_ledger_proto_rawDesc), len(file_proto_ledger_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
