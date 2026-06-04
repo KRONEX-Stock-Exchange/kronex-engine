@@ -24,6 +24,9 @@ const (
 type LedgerSnapshot struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Accounts      []*Account             `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty"`
+	StockBalances []*StockBalance        `protobuf:"bytes,3,rep,name=stock_balances,json=stockBalances,proto3" json:"stock_balances,omitempty"`
+	Stocks        []*Stock               `protobuf:"bytes,4,rep,name=stocks,proto3" json:"stocks,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,13 +68,257 @@ func (x *LedgerSnapshot) GetVersion() uint32 {
 	return 0
 }
 
+func (x *LedgerSnapshot) GetAccounts() []*Account {
+	if x != nil {
+		return x.Accounts
+	}
+	return nil
+}
+
+func (x *LedgerSnapshot) GetStockBalances() []*StockBalance {
+	if x != nil {
+		return x.StockBalances
+	}
+	return nil
+}
+
+func (x *LedgerSnapshot) GetStocks() []*Stock {
+	if x != nil {
+		return x.Stocks
+	}
+	return nil
+}
+
+type Account struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Balance          uint64                 `protobuf:"varint,2,opt,name=balance,proto3" json:"balance,omitempty"`
+	AvailableBalance uint64                 `protobuf:"varint,3,opt,name=available_balance,json=availableBalance,proto3" json:"available_balance,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Account) Reset() {
+	*x = Account{}
+	mi := &file_proto_ledger_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Account) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Account) ProtoMessage() {}
+
+func (x *Account) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ledger_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Account.ProtoReflect.Descriptor instead.
+func (*Account) Descriptor() ([]byte, []int) {
+	return file_proto_ledger_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Account) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Account) GetBalance() uint64 {
+	if x != nil {
+		return x.Balance
+	}
+	return 0
+}
+
+func (x *Account) GetAvailableBalance() uint64 {
+	if x != nil {
+		return x.AvailableBalance
+	}
+	return 0
+}
+
+type StockBalance struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	AccountId         int32                  `protobuf:"varint,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	StockId           int32                  `protobuf:"varint,2,opt,name=stock_id,json=stockId,proto3" json:"stock_id,omitempty"`
+	Quantity          uint64                 `protobuf:"varint,3,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	AvailableQuantity uint64                 `protobuf:"varint,4,opt,name=available_quantity,json=availableQuantity,proto3" json:"available_quantity,omitempty"`
+	Average           uint64                 `protobuf:"varint,5,opt,name=average,proto3" json:"average,omitempty"`
+	TotalBuyAmount    uint64                 `protobuf:"varint,6,opt,name=total_buy_amount,json=totalBuyAmount,proto3" json:"total_buy_amount,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *StockBalance) Reset() {
+	*x = StockBalance{}
+	mi := &file_proto_ledger_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StockBalance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StockBalance) ProtoMessage() {}
+
+func (x *StockBalance) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ledger_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StockBalance.ProtoReflect.Descriptor instead.
+func (*StockBalance) Descriptor() ([]byte, []int) {
+	return file_proto_ledger_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *StockBalance) GetAccountId() int32 {
+	if x != nil {
+		return x.AccountId
+	}
+	return 0
+}
+
+func (x *StockBalance) GetStockId() int32 {
+	if x != nil {
+		return x.StockId
+	}
+	return 0
+}
+
+func (x *StockBalance) GetQuantity() uint64 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+func (x *StockBalance) GetAvailableQuantity() uint64 {
+	if x != nil {
+		return x.AvailableQuantity
+	}
+	return 0
+}
+
+func (x *StockBalance) GetAverage() uint64 {
+	if x != nil {
+		return x.Average
+	}
+	return 0
+}
+
+func (x *StockBalance) GetTotalBuyAmount() uint64 {
+	if x != nil {
+		return x.TotalBuyAmount
+	}
+	return 0
+}
+
+type Stock struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Price         uint64                 `protobuf:"varint,2,opt,name=price,proto3" json:"price,omitempty"`
+	Status        uint32                 `protobuf:"varint,3,opt,name=status,proto3" json:"status,omitempty"` // domain.StockStatus
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Stock) Reset() {
+	*x = Stock{}
+	mi := &file_proto_ledger_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Stock) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Stock) ProtoMessage() {}
+
+func (x *Stock) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ledger_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Stock.ProtoReflect.Descriptor instead.
+func (*Stock) Descriptor() ([]byte, []int) {
+	return file_proto_ledger_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Stock) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Stock) GetPrice() uint64 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+func (x *Stock) GetStatus() uint32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
 var File_proto_ledger_proto protoreflect.FileDescriptor
 
 const file_proto_ledger_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/ledger.proto\x12\x06ledger\"*\n" +
+	"\x12proto/ledger.proto\x12\x06ledger\"\xbb\x01\n" +
 	"\x0eLedgerSnapshot\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\rR\aversionBRZPgithub.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb;ledgerpbb\x06proto3"
+	"\aversion\x18\x01 \x01(\rR\aversion\x12+\n" +
+	"\baccounts\x18\x02 \x03(\v2\x0f.ledger.AccountR\baccounts\x12;\n" +
+	"\x0estock_balances\x18\x03 \x03(\v2\x14.ledger.StockBalanceR\rstockBalances\x12%\n" +
+	"\x06stocks\x18\x04 \x03(\v2\r.ledger.StockR\x06stocks\"`\n" +
+	"\aAccount\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x18\n" +
+	"\abalance\x18\x02 \x01(\x04R\abalance\x12+\n" +
+	"\x11available_balance\x18\x03 \x01(\x04R\x10availableBalance\"\xd7\x01\n" +
+	"\fStockBalance\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\x05R\taccountId\x12\x19\n" +
+	"\bstock_id\x18\x02 \x01(\x05R\astockId\x12\x1a\n" +
+	"\bquantity\x18\x03 \x01(\x04R\bquantity\x12-\n" +
+	"\x12available_quantity\x18\x04 \x01(\x04R\x11availableQuantity\x12\x18\n" +
+	"\aaverage\x18\x05 \x01(\x04R\aaverage\x12(\n" +
+	"\x10total_buy_amount\x18\x06 \x01(\x04R\x0etotalBuyAmount\"E\n" +
+	"\x05Stock\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
+	"\x05price\x18\x02 \x01(\x04R\x05price\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\rR\x06statusBRZPgithub.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb;ledgerpbb\x06proto3"
 
 var (
 	file_proto_ledger_proto_rawDescOnce sync.Once
@@ -85,16 +332,22 @@ func file_proto_ledger_proto_rawDescGZIP() []byte {
 	return file_proto_ledger_proto_rawDescData
 }
 
-var file_proto_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_proto_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_ledger_proto_goTypes = []any{
 	(*LedgerSnapshot)(nil), // 0: ledger.LedgerSnapshot
+	(*Account)(nil),        // 1: ledger.Account
+	(*StockBalance)(nil),   // 2: ledger.StockBalance
+	(*Stock)(nil),          // 3: ledger.Stock
 }
 var file_proto_ledger_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: ledger.LedgerSnapshot.accounts:type_name -> ledger.Account
+	2, // 1: ledger.LedgerSnapshot.stock_balances:type_name -> ledger.StockBalance
+	3, // 2: ledger.LedgerSnapshot.stocks:type_name -> ledger.Stock
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_ledger_proto_init() }
@@ -108,7 +361,7 @@ func file_proto_ledger_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_ledger_proto_rawDesc), len(file_proto_ledger_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
