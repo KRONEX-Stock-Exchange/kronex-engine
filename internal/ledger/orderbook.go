@@ -8,13 +8,19 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger/ledgerpb"
 )
 
+//////////////////////////////////////////////
+// -------------- OrderBook --------------- //
+//////////////////////////////////////////////
+
 // NOTE: FIFO 원칙을 지키기 위해 반듯이 PushBack, ReadFront 해야합니다.
 // NOTE/TODO: 외부에서 buy, sell 필드를 직접 수정할 경우 정합성이 깨질 수 있어 비공개 필드로 전환 함
 // 추후 매칭엔진에서 주문을 조회 하고 처리 할 수 있도록 하는 함수 추가 필요
 type OrderBook struct {
-	buy   map[uint64]*list.List // Price -> Order Nodes -> Order Node
-	sell  map[uint64]*list.List
-	index map[int64]*orderRef // Order Id -> Order Node
+	buy        map[uint64]*list.List // Price -> Order Nodes -> Order Node
+	sell       map[uint64]*list.List
+	buyPrices  []uint64            // 활성 매수 호가 (오름차순 정렬)
+	sellPrices []uint64            // 활성 매도 호가 (오름차순 정렬)
+	index      map[int64]*orderRef // Order Id -> Order Node
 }
 
 type orderRef struct {
@@ -34,14 +40,19 @@ func NewOrderBook() *OrderBook {
 // NOTE: Order 복사로 Orderbook으로 소유권 이전
 func (b *OrderBook) Add(order domain.Order) {
 	side := b.buy
+	prices := &b.buyPrices
 	if order.TradingType == domain.TRADING_SELL {
 		side = b.sell
+		prices = &b.sellPrices
 	}
 
 	queue, ok := side[order.Price]
 	if !ok {
 		queue = list.New()
 		side[order.Price] = queue
+		// 새 가격대 생성 시 정렬 위치에 삽입
+		i, _ := slices.BinarySearch(*prices, order.Price)
+		*prices = slices.Insert(*prices, i, order.Price)
 	}
 	elem := queue.PushBack(&order)
 	b.index[order.Id] = &orderRef{order.TradingType, order.Price, elem}
@@ -53,8 +64,10 @@ func (b *OrderBook) Cancel(orderId int64) bool {
 		return false // 이미 체결/취소됨
 	}
 	side := b.buy
+	prices := &b.buyPrices
 	if ref.tradingType == domain.TRADING_SELL {
 		side = b.sell
+		prices = &b.sellPrices
 	}
 
 	// 주문삭제
@@ -65,10 +78,35 @@ func (b *OrderBook) Cancel(orderId int64) bool {
 	// 빈 가격대 정리
 	if queue.Len() == 0 {
 		delete(side, ref.price)
+
+		// 정렬 슬라이스에서도 제거
+		if i, found := slices.BinarySearch(*prices, ref.price); found {
+			*prices = slices.Delete(*prices, i, i+1)
+		}
 	}
 
 	return true
 }
+
+// 최우선 매도 호가 조회 (가장 낮은 매도가) 호가창이 비었으면 ok=false
+func (b *OrderBook) BestAsk() (price uint64, ok bool) {
+	if len(b.sellPrices) == 0 {
+		return 0, false
+	}
+	return b.sellPrices[0], true
+}
+
+// 최우선 매수 호가 조회 (가장 높은 매수가) 호가창이 비었으면 ok=false
+func (b *OrderBook) BestBid() (price uint64, ok bool) {
+	if len(b.buyPrices) == 0 {
+		return 0, false
+	}
+	return b.buyPrices[len(b.buyPrices)-1], true
+}
+
+//////////////////////////////////////////////
+// -------------- OrderBooks -------------- //
+//////////////////////////////////////////////
 
 type OrderBooks struct {
 	byStock map[int32]*OrderBook
@@ -107,20 +145,18 @@ func (b *OrderBooks) Get(stockId int32) *OrderBook {
 func (b *OrderBook) orders() []*domain.Order {
 	out := make([]*domain.Order, 0, len(b.index))
 
-	for _, side := range []map[uint64]*list.List{b.buy, b.sell} {
-		prices := make([]uint64, 0, len(side))
+	sides := []struct {
+		queues map[uint64]*list.List
+		prices []uint64
+	}{
+		{b.buy, b.buyPrices},
+		{b.sell, b.sellPrices},
+	}
 
-		// Buy Key 저장 [100, 99]
-		for p := range side {
-			prices = append(prices, p)
-		}
-
-		// 정렬 [99, 100]
-		slices.Sort(prices)
-
+	for _, side := range sides {
 		// out[id3, id1, id2]
-		for _, p := range prices {
-			for e := side[p].Front(); e != nil; e = e.Next() {
+		for _, p := range side.prices {
+			for e := side.queues[p].Front(); e != nil; e = e.Next() {
 				out = append(out, e.Value.(*domain.Order))
 			}
 		}
