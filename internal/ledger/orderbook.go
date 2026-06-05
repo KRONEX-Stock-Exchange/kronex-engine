@@ -63,28 +63,8 @@ func (b *OrderBook) Cancel(orderId int64) bool {
 	if !ok {
 		return false // 이미 체결/취소됨
 	}
-	side := b.buy
-	prices := &b.buyPrices
-	if ref.tradingType == domain.TRADING_SELL {
-		side = b.sell
-		prices = &b.sellPrices
-	}
 
-	// 주문삭제
-	queue := side[ref.price]
-	queue.Remove(ref.elem)
-	delete(b.index, orderId)
-
-	// 빈 가격대 정리
-	if queue.Len() == 0 {
-		delete(side, ref.price)
-
-		// 정렬 슬라이스에서도 제거
-		if i, found := slices.BinarySearch(*prices, ref.price); found {
-			*prices = slices.Delete(*prices, i, i+1)
-		}
-	}
-
+	b.removeRef(orderId, ref)
 	return true
 }
 
@@ -116,6 +96,58 @@ func (b *OrderBook) Front(side domain.TradingType, price uint64) (order *domain.
 		return nil, false
 	}
 	return queue.Front().Value.(*domain.Order), true
+}
+
+// 노드를 호가창에서 제거하고 index/가격 슬라이스를 동기화
+// 빈 가격대는 가격 슬라이스에서도 함께 정리
+func (b *OrderBook) removeRef(orderId int64, ref *orderRef) {
+	side := b.buy
+	prices := &b.buyPrices
+	if ref.tradingType == domain.TRADING_SELL {
+		side = b.sell
+		prices = &b.sellPrices
+	}
+
+	queue := side[ref.price]
+	queue.Remove(ref.elem)
+	delete(b.index, orderId)
+
+	// 빈 가격대 정리
+	if queue.Len() == 0 {
+		delete(side, ref.price)
+		if i, found := slices.BinarySearch(*prices, ref.price); found {
+			*prices = slices.Delete(*prices, i, i+1)
+		}
+	}
+}
+
+// 대기 주문을 want 만큼 체결 시도하고 실제 체결량을 반환
+// NOTE:
+// 남은 수량까지만 채우므로 want 가 더 커도 초과 체결되지 않음
+// 전량 체결되면 호가창에서 제거 함. 주문이 없거나 잔량이 0이면 0을 반환
+func (b *OrderBook) Fill(orderId int64, want uint64) (filled uint64) {
+	ref, ok := b.index[orderId]
+	if !ok {
+		return 0 // 이미 체결/취소됨
+	}
+
+	order := ref.elem.Value.(*domain.Order)
+	remaining := order.Quantity - order.FilledQuantity
+
+	// 남은 수량까지만 클램프
+	filled = min(want, remaining)
+	if filled == 0 {
+		return 0
+	}
+
+	order.FilledQuantity += filled
+
+	// 전량 체결 시 호가창에서 제거
+	if order.FilledQuantity == order.Quantity {
+		b.removeRef(orderId, ref)
+	}
+
+	return filled
 }
 
 //////////////////////////////////////////////
