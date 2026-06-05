@@ -104,6 +104,20 @@ func (b *OrderBook) BestBid() (price uint64, ok bool) {
 	return b.buyPrices[len(b.buyPrices)-1], true
 }
 
+// 특정 호가에서 가장 우선순위가 높은(FIFO) 주문 반환 없으면 ok=false
+func (b *OrderBook) Front(side domain.TradingType, price uint64) (order *domain.Order, ok bool) {
+	queues := b.buy
+	if side == domain.TRADING_SELL {
+		queues = b.sell
+	}
+
+	queue, ok := queues[price]
+	if !ok || queue.Len() == 0 {
+		return nil, false
+	}
+	return queue.Front().Value.(*domain.Order), true
+}
+
 //////////////////////////////////////////////
 // -------------- OrderBooks -------------- //
 //////////////////////////////////////////////
