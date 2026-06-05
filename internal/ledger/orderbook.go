@@ -98,6 +98,15 @@ func (b *OrderBook) Front(side domain.TradingType, price uint64) (order *domain.
 	return queue.Front().Value.(*domain.Order), true
 }
 
+// 호가창에 있는 특정 주문 조회 없으면 ok=false
+func (b *OrderBook) Get(orderId int64) (order *domain.Order, ok bool) {
+	ref, ok := b.index[orderId]
+	if !ok {
+		return nil, false
+	}
+	return ref.elem.Value.(*domain.Order), true
+}
+
 // 노드를 호가창에서 제거하고 index/가격 슬라이스를 동기화
 // 빈 가격대는 가격 슬라이스에서도 함께 정리
 func (b *OrderBook) removeRef(orderId int64, ref *orderRef) {
