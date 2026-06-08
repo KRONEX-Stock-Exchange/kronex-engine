@@ -85,7 +85,7 @@ func (b *OrderBook) BestBid() (price uint64, ok bool) {
 }
 
 // 특정 호가에서 가장 우선순위가 높은(FIFO) 주문 반환 없으면 ok=false
-func (b *OrderBook) Front(side domain.TradingType, price uint64) (order *domain.Order, ok bool) {
+func (b *OrderBook) Front(side domain.TradingType, price uint64) (order domain.Order, ok bool) {
 	queues := b.buy
 	if side == domain.TRADING_SELL {
 		queues = b.sell
@@ -93,18 +93,18 @@ func (b *OrderBook) Front(side domain.TradingType, price uint64) (order *domain.
 
 	queue, ok := queues[price]
 	if !ok || queue.Len() == 0 {
-		return nil, false
+		return domain.Order{}, false
 	}
-	return queue.Front().Value.(*domain.Order), true
+	return *queue.Front().Value.(*domain.Order), true
 }
 
 // 호가창에 있는 특정 주문 조회 없으면 ok=false
-func (b *OrderBook) Get(orderId int64) (order *domain.Order, ok bool) {
+func (b *OrderBook) Get(orderId int64) (order domain.Order, ok bool) {
 	ref, ok := b.index[orderId]
 	if !ok {
-		return nil, false
+		return domain.Order{}, false
 	}
-	return ref.elem.Value.(*domain.Order), true
+	return *ref.elem.Value.(*domain.Order), true
 }
 
 // 노드를 호가창에서 제거하고 index/가격 슬라이스를 동기화
