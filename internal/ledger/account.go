@@ -15,9 +15,13 @@ func NewAccounts() *Accounts {
 	return &Accounts{byID: make(map[int32]*domain.Account)}
 }
 
-func (a *Accounts) Get(id int32) (*domain.Account, bool) {
+// 계좌 조회 (읽기 전용 복사본)
+func (a *Accounts) Get(id int32) (domain.Account, bool) {
 	acc, ok := a.byID[id]
-	return acc, ok
+	if !ok {
+		return domain.Account{}, false
+	}
+	return *acc, true
 }
 
 func (a *Accounts) Upsert(acc *domain.Account) {

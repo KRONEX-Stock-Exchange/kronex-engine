@@ -21,9 +21,13 @@ func NewStockBalances() *StockBalances {
 	return &StockBalances{byKey: make(map[stockKey]*domain.StockBalance)}
 }
 
-func (s *StockBalances) Get(accountID, stockID int32) (*domain.StockBalance, bool) {
+// 보유주식 조회 (읽기 전용 복사본)
+func (s *StockBalances) Get(accountID, stockID int32) (domain.StockBalance, bool) {
 	sb, ok := s.byKey[stockKey{accountID, stockID}]
-	return sb, ok
+	if !ok {
+		return domain.StockBalance{}, false
+	}
+	return *sb, true
 }
 
 func (s *StockBalances) Upsert(sb *domain.StockBalance) {

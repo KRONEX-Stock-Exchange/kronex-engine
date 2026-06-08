@@ -15,9 +15,13 @@ func NewStocks() *Stocks {
 	return &Stocks{byID: make(map[int32]*domain.Stock)}
 }
 
-func (s *Stocks) Get(id int32) (*domain.Stock, bool) {
+// 종목 조회 (읽기 전용 복사본)
+func (s *Stocks) Get(id int32) (domain.Stock, bool) {
 	st, ok := s.byID[id]
-	return st, ok
+	if !ok {
+		return domain.Stock{}, false
+	}
+	return *st, true
 }
 
 func (s *Stocks) Upsert(st *domain.Stock) {
