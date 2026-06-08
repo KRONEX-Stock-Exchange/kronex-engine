@@ -79,7 +79,8 @@ func orderIDs(ob *OrderBook) []int64 {
 // ------------- Testing Func ------------- //
 //////////////////////////////////////////////
 
-// 전체 상태를 직렬화 → 역직렬화했을 때 모든 데이터가 동일하게 복원되는지 검증
+// [시나리오] 전체 상태를 직렬화 → 역직렬화 왕복
+// [기대]    정규형 proto 비교로 모든 데이터가 동일 복원, 재직렬화 바이트도 동일
 func TestState_SerializeRestore_RoundTrip(t *testing.T) {
 	original := buildSampleState()
 
@@ -111,7 +112,8 @@ func TestState_SerializeRestore_RoundTrip(t *testing.T) {
 	}
 }
 
-// 직렬화/역직렬화 후에도 호가창 FIFO 순서가 보존되는지 명시적으로 검증
+// [시나리오] 호가창이 있는 상태를 직렬화 → 역직렬화
+// [기대]    복원 후에도 호가창 FIFO 순서가 보존됨 (원본과도 일치)
 func TestState_SerializeRestore_PreservesOrderBookFIFO(t *testing.T) {
 	original := buildSampleState()
 
@@ -137,7 +139,8 @@ func TestState_SerializeRestore_PreservesOrderBookFIFO(t *testing.T) {
 	}
 }
 
-// 복원된 개별 필드 값이 정확한지 공개 게터로 점검
+// [시나리오] 복원된 상태의 개별 필드를 공개 게터로 점검
+// [기대]    계좌/종목/보유 값이 원본과 일치
 func TestState_SerializeRestore_FieldValues(t *testing.T) {
 	original := buildSampleState()
 	data, err := original.Serialize()
@@ -171,7 +174,8 @@ func TestState_SerializeRestore_FieldValues(t *testing.T) {
 	}
 }
 
-// 데이터가 전혀 없는 빈 상태도 안전하게 왕복되는지 검증
+// [시나리오] 데이터가 전혀 없는 빈 상태를 왕복
+// [기대]    빈 상태도 안전하게 동일 복원됨
 func TestState_SerializeRestore_Empty(t *testing.T) {
 	original := NewState()
 
@@ -190,7 +194,8 @@ func TestState_SerializeRestore_Empty(t *testing.T) {
 	}
 }
 
-// 스냅샷 버전이 맞지 않으면 Restore 가 에러를 반환해야 한다.
+// [시나리오] 스냅샷 버전이 맞지 않는 데이터로 Restore
+// [기대]    에러 반환
 func TestState_Restore_VersionMismatch(t *testing.T) {
 	data, err := proto.Marshal(&ledgerpb.LedgerSnapshot{Version: snapshotVersion + 1})
 	if err != nil {
@@ -202,7 +207,8 @@ func TestState_Restore_VersionMismatch(t *testing.T) {
 	}
 }
 
-// 깨진 바이트를 넣으면 Restore 가 에러를 반환해야 한다.
+// [시나리오] 깨진 바이트로 Restore
+// [기대]    에러 반환
 func TestState_Restore_CorruptData(t *testing.T) {
 	if err := NewState().Restore([]byte{0xff, 0xff, 0xff, 0xff}); err == nil {
 		t.Error("Restore did not return an error on corrupt data")
