@@ -171,6 +171,7 @@ func NewOrderBooks() *OrderBooks {
 	return &OrderBooks{byStock: make(map[int32]*OrderBook)}
 }
 
+// NOTE: OrderBook 내부에 Slice가 존재하여 복사된 값을 반환하면 안됩니다.
 func (b *OrderBooks) Get(stockId int32) *OrderBook {
 	ob, ok := b.byStock[stockId]
 	if !ok {
