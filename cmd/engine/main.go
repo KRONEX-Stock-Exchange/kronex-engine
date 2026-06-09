@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
 
@@ -20,7 +23,8 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// Mysql
 	db, err := storage.OpenMySQL(ctx, cfg.MySQL)
@@ -28,7 +32,6 @@ func main() {
 		log.Fatalf("connect mysql: %v", err)
 	}
 	defer db.Close()
-
 	log.Printf("connected to MySQL at %s:%d/%s", cfg.MySQL.Host, cfg.MySQL.Port, cfg.MySQL.Database)
 
 	// RabbitMQ
@@ -37,9 +40,15 @@ func main() {
 		log.Fatalf("connect rabbitmq: %v", err)
 	}
 	defer mq.Close()
-
 	log.Printf("connected to RabbitMQ at %s:%d", cfg.RabbitMQ.Host, cfg.RabbitMQ.Port)
 
-	engine := core.NewEngine(mq)
-	_ = engine
+	// 엔진 실행
+	engine := core.NewEngine(mq, cfg.RabbitMQ.Queue)
+
+	log.Printf("engine consuming queue %q", cfg.RabbitMQ.Queue)
+	if err := engine.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		log.Fatalf("engine stopped: %v", err)
+	}
+
+	log.Println("engine shut down")
 }
