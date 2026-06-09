@@ -18,4 +18,5 @@ type Consumer interface {
 type Delivery struct {
 	Message domain.Message
 	Ack     func() error
+	Nack    func(requeue bool) error
 }

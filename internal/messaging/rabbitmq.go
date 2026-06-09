@@ -92,7 +92,8 @@ func (c *Connection) Consume(ctx context.Context, queue string, handle func(core
 					RoutingKey: d.RoutingKey,
 					Payload:    d.Body,
 				},
-				Ack: func() error { return d.Ack(false) },
+				Ack:  func() error { return d.Ack(false) },
+				Nack: func(requeue bool) error { return d.Nack(false, requeue) },
 			}
 			if err := handle(del); err != nil {
 				return err

@@ -20,6 +20,7 @@ type RabbitMQ struct {
 	User          string
 	Password      string
 	PrefetchCount int
+	Queue         string
 }
 
 type WAL struct {
@@ -62,6 +63,7 @@ func Load() (Config, error) {
 			User:          env("RABBITMQ_USER", "guest"),
 			Password:      env("RABBITMQ_PASSWORD", "guest"),
 			PrefetchCount: prefetch,
+			Queue:         env("RABBITMQ_QUEUE", "order_queue"),
 		},
 		WAL: WAL{
 			Dir: env("WAL_DIR", "./data/wal"),
