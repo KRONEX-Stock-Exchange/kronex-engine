@@ -43,7 +43,11 @@ func main() {
 	log.Printf("connected to RabbitMQ at %s:%d", cfg.RabbitMQ.Host, cfg.RabbitMQ.Port)
 
 	// 엔진 실행
-	engine := core.NewEngine(mq, cfg.RabbitMQ.Queue)
+	engine, err := core.NewEngine(mq, cfg.RabbitMQ.Queue)
+	if err != nil {
+		log.Fatalf("create engine: %v", err)
+	}
+	defer engine.Close()
 
 	log.Printf("engine consuming queue %q", cfg.RabbitMQ.Queue)
 	if err := engine.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

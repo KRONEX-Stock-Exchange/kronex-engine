@@ -3,78 +3,69 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
-	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
+	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/wal"
+)
+
+const (
+	PatternOrderCreated = "order.created"
 )
 
 type Engine struct {
-	con   Consumer
-	queue string
+	con    Consumer
+	queue  string
+	input  *wal.WAL
+	output *wal.WAL
 }
 
-func NewEngine(con Consumer, queue string) *Engine {
-	return &Engine{con: con, queue: queue}
+func NewEngine(con Consumer, queue string) (*Engine, error) {
+	input, err := wal.Open("./data/wal/input", nil)
+	if err != nil {
+		return nil, fmt.Errorf("open input wal: %w", err)
+	}
+
+	output, err := wal.Open("./data/wal/output", nil)
+	if err != nil {
+		return nil, fmt.Errorf("open output wal: %w", err)
+	}
+
+	return &Engine{con: con, queue: queue, input: input, output: output}, nil
+}
+
+func (e *Engine) Close() error {
+	return errors.Join(e.input.Close(), e.output.Close())
 }
 
 func (e *Engine) Run(ctx context.Context) error {
 	return e.con.Consume(ctx, e.queue, e.handle)
 }
 
-type orderEnvelope struct {
-	Pattern string       `json:"pattern"`
-	Data    domain.Order `json:"data"`
+type envelope struct {
+	Pattern string          `json:"pattern"`
+	Data    json.RawMessage `json:"data"`
 }
 
-// TODO: WAL 작성 및 중복 처리 추가
 func (e *Engine) handle(d Delivery) error {
-	// JSON 형식 검사
-	var env orderEnvelope
+	var env envelope
 	if err := json.Unmarshal(d.Message.Payload, &env); err != nil {
-		log.Printf("engine: decode order: %v", err)
-		return d.Nack(false)
-	}
-	order := env.Data
-
-	log.Printf("engine: received order %+v", order)
-
-	// 주문 라우팅
-	if err := e.route(order); err != nil {
-		log.Printf("engine: route order %d: %v", order.Id, err)
+		log.Printf("engine: decode envelope: %v", err)
 		return d.Nack(false)
 	}
 
-	return d.Ack()
-}
+	// Input WAL 작성
+	if _, err := e.input.Append(d.Message.Payload); err != nil {
+		log.Printf("engine: append input wal: %v", err)
+		return d.Nack(true)
+	}
 
-func (e *Engine) route(order domain.Order) error {
-	switch order.TradingType {
-	case domain.TRADING_BUY, domain.TRADING_SELL:
-		return e.match(order)
-	case domain.TRADING_EDIT:
-		return e.edit(order)
-	case domain.TRADING_CANCEL:
-		return e.cancel(order)
+	switch env.Pattern {
+	case PatternOrderCreated:
+		return e.handleOrder(d, env.Data)
 	default:
-		return fmt.Errorf("unknown trading type %d", order.TradingType)
+		log.Printf("engine: unknown pattern %q", env.Pattern)
+		return d.Nack(false)
 	}
-}
-
-// TODO: 호가창 체결 로직 연결
-func (e *Engine) match(order domain.Order) error {
-	log.Printf("engine: match order id=%d stock=%d price=%d qty=%d", order.Id, order.StockId, order.Price, order.Quantity)
-	return nil
-}
-
-// TODO: 주문 정정 로직 연결
-func (e *Engine) edit(order domain.Order) error {
-	log.Printf("engine: edit order id=%d", order.Id)
-	return nil
-}
-
-// TODO: 주문 취소 로직 연결
-func (e *Engine) cancel(order domain.Order) error {
-	log.Printf("engine: cancel order id=%d", order.Id)
-	return nil
 }
