@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/wal"
 )
 
@@ -19,6 +20,7 @@ type Engine struct {
 	queue  string
 	input  *wal.WAL
 	output *wal.WAL
+	state  *ledger.State
 }
 
 func NewEngine(con Consumer, queue string) (*Engine, error) {
@@ -32,7 +34,13 @@ func NewEngine(con Consumer, queue string) (*Engine, error) {
 		return nil, fmt.Errorf("open output wal: %w", err)
 	}
 
-	return &Engine{con: con, queue: queue, input: input, output: output}, nil
+	return &Engine{
+		con:    con,
+		queue:  queue,
+		input:  input,
+		output: output,
+		state:  ledger.NewState(),
+	}, nil
 }
 
 func (e *Engine) Close() error {
@@ -57,8 +65,7 @@ func (e *Engine) handle(d Delivery) error {
 
 	// Input WAL 작성
 	if _, err := e.input.Append(d.Message.Payload); err != nil {
-		log.Printf("engine: append input wal: %v", err)
-		return d.Nack(true)
+		panic(fmt.Errorf("engine: append input wal: %w", err))
 	}
 
 	switch env.Pattern {
