@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/bits"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
@@ -17,7 +18,7 @@ func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
 	log.Printf("engine: received order %+v", order)
 
 	// 유효성 검사
-	if err := validateOrder(order); err != nil {
+	if err := e.validateOrder(order); err != nil {
 		log.Printf("engine: invalid order %d: %v", order.Id, err)
 
 		// TODO: 주문 현황을 업데이트 하는 별도 DB Publisher 필요
@@ -37,29 +38,83 @@ func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
 }
 
 // 주문 유효성 검사
-// TODO: 원장 연결 후 실제 원장에 존재 하는지 추가해야됨
-func validateOrder(order domain.Order) error {
+func (e *Engine) validateOrder(order domain.Order) error {
 	if order.Id <= 0 {
 		return fmt.Errorf("invalid order id %d", order.Id)
 	}
 
 	switch order.TradingType {
 	case domain.TRADING_BUY, domain.TRADING_SELL:
-		if order.AccountId <= 0 {
-			return fmt.Errorf("invalid account id %d", order.AccountId)
-		}
-		if order.StockId <= 0 {
-			return fmt.Errorf("invalid stock id %d", order.StockId)
-		}
-		if order.Quantity == 0 {
-			return fmt.Errorf("quantity must be greater than 0")
-		}
+		return e.validateTrade(order)
 	case domain.TRADING_EDIT, domain.TRADING_CANCEL:
 		if order.TargetId <= 0 {
 			return fmt.Errorf("invalid target id %d", order.TargetId)
 		}
+		return nil
 	default:
 		return fmt.Errorf("unknown trading type %d", order.TradingType)
+	}
+}
+
+// 원장 상태상 가능한 주문인지 검사
+func (e *Engine) validateTrade(order domain.Order) error {
+	if order.Quantity == 0 || order.FilledQuantity != 0 {
+		return fmt.Errorf("invalid quantity (quantity=%d, filledQuantity=%d)", order.Quantity, order.FilledQuantity)
+	}
+	// TODO: 시장가 주문 처리는 추후 별도 구현
+	if order.OrderType != domain.ORDER_LIMIT {
+		return fmt.Errorf("unsupported order type %d (only limit supported)", order.OrderType)
+	}
+	if order.Price == 0 {
+		return fmt.Errorf("limit order price must be greater than 0")
+	}
+
+	// 원장 상태 존재 여부 검사
+	account, ok := e.state.Accounts.Get(order.AccountId)
+	if !ok {
+		return fmt.Errorf("account %d does not exist", order.AccountId)
+	}
+	stock, ok := e.state.Stocks.Get(order.StockId)
+	if !ok {
+		return fmt.Errorf("stock %d does not exist", order.StockId)
+	}
+
+	// 거래 가능(상장) 상태인지
+	if stock.Status != domain.LISTED {
+		return fmt.Errorf("stock %d is not tradable (status=%d)", order.StockId, stock.Status)
+	}
+
+	switch order.TradingType {
+	case domain.TRADING_BUY:
+		return validateBuyingPower(order, account)
+	case domain.TRADING_SELL:
+		return e.validateSellable(order)
+	}
+	return nil
+}
+
+// 매수 가능 금액 검사
+func validateBuyingPower(order domain.Order, account domain.Account) error {
+	hi, cost := bits.Mul64(order.Price, order.Quantity)
+	if hi != 0 {
+		return fmt.Errorf("order cost overflow (price=%d qty=%d)", order.Price, order.Quantity)
+	}
+	if account.AvailableBalance < cost {
+		return fmt.Errorf("insufficient balance: need %d, available %d", cost, account.AvailableBalance)
+	}
+
+	// TODO: 시장가 주문 별도 처리 필요
+	return nil
+}
+
+// 매도 가능 수량 검사
+func (e *Engine) validateSellable(order domain.Order) error {
+	holding, ok := e.state.StockBalances.Get(order.AccountId, order.StockId)
+	if !ok {
+		return fmt.Errorf("account %d holds no stock %d", order.AccountId, order.StockId)
+	}
+	if holding.AvailableQuantity < order.Quantity {
+		return fmt.Errorf("insufficient stock: have %d, want to sell %d", holding.AvailableQuantity, order.Quantity)
 	}
 	return nil
 }
