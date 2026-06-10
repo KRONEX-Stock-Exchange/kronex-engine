@@ -57,16 +57,17 @@ func (e *Engine) validateOrder(order domain.Order) error {
 }
 
 // 원장 상태상 가능한 주문인지 검사
+// NOTE: 시장가 주문시 주문가가 그날 상한으로 들어와야함
+// CONSIDER: 상하한가 검사 추가
 func (e *Engine) validateTrade(order domain.Order) error {
 	if order.Quantity == 0 || order.FilledQuantity != 0 {
 		return fmt.Errorf("invalid quantity (quantity=%d, filledQuantity=%d)", order.Quantity, order.FilledQuantity)
 	}
-	// TODO: 시장가 주문 처리는 추후 별도 구현
-	if order.OrderType != domain.ORDER_LIMIT {
-		return fmt.Errorf("unsupported order type %d (only limit supported)", order.OrderType)
+	if order.OrderType != domain.ORDER_LIMIT && order.OrderType != domain.ORDER_MARKET {
+		return fmt.Errorf("unsupported order type")
 	}
 	if order.Price == 0 {
-		return fmt.Errorf("limit order price must be greater than 0")
+		return fmt.Errorf("rder price must be greater than 0")
 	}
 
 	// 원장 상태 존재 여부 검사
@@ -103,7 +104,6 @@ func validateBuyingPower(order domain.Order, account domain.Account) error {
 		return fmt.Errorf("insufficient balance: need %d, available %d", cost, account.AvailableBalance)
 	}
 
-	// TODO: 시장가 주문 별도 처리 필요
 	return nil
 }
 
@@ -132,7 +132,6 @@ func (e *Engine) route(order domain.Order) error {
 	}
 }
 
-// TODO: 시장가 주문시 가격이 그날 상하가로 들어오도록 해야함
 // CONSIDER: 자전거래 관련 로직 고려해보기
 func (e *Engine) match(order domain.Order) error {
 	ob := e.state.OrderBooks.Get(order.StockId)
