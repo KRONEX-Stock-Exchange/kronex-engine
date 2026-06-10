@@ -132,9 +132,27 @@ func (e *Engine) route(order domain.Order) error {
 	}
 }
 
-// TODO: 호가창 체결 로직 연결
+// TODO: 시장가 주문시 가격이 그날 상하가로 들어오도록 해야함
+// CONSIDER: 자전거래 관련 로직 고려해보기
 func (e *Engine) match(order domain.Order) error {
 	ob := e.state.OrderBooks.Get(order.StockId)
+
+	// 가용 잔고 및 수량 차감
+	switch order.TradingType {
+	case domain.TRADING_BUY:
+		if acc, ok := e.state.Accounts.Get(order.AccountId); ok {
+			acc.AvailableBalance -= order.Price * order.Quantity
+			e.state.Accounts.Upsert(&acc)
+		}
+	case domain.TRADING_SELL:
+		if holding, ok := e.state.StockBalances.Get(order.AccountId, order.StockId); ok {
+			holding.AvailableQuantity -= order.Quantity
+			e.state.StockBalances.Upsert(&holding)
+		}
+	}
+
+	var filledCash uint64 // 총 실 체결 금액
+	var lastTradePrice uint64
 
 	// 모든 수량이 소진 될때까지 반복
 	for order.FilledQuantity < order.Quantity {
@@ -181,7 +199,49 @@ func (e *Engine) match(order domain.Order) error {
 		}
 		order.FilledQuantity += filled
 
-		// 체결 내역 발행
+		// 원장 상태 업데이트
+		cash := bestPrice * filled
+		filledCash += cash
+		lastTradePrice = bestPrice
+		buyerID, sellerID := order.AccountId, counter.AccountId
+		if order.TradingType == domain.TRADING_SELL {
+			buyerID, sellerID = counter.AccountId, order.AccountId
+		}
+
+		// 매수자 잔고 차감 및 주식 입고
+		if buyer, ok := e.state.Accounts.Get(buyerID); ok {
+			buyer.Balance -= cash
+			e.state.Accounts.Upsert(&buyer)
+		}
+		buyerHold, exists := e.state.StockBalances.Get(buyerID, order.StockId)
+		if !exists {
+			buyerHold = domain.StockBalance{AccountId: buyerID, StockId: order.StockId}
+		}
+
+		buyerHold.Quantity += filled
+		buyerHold.AvailableQuantity += filled
+		buyerHold.TotalBuyAmount += cash
+		buyerHold.Average = buyerHold.TotalBuyAmount / buyerHold.Quantity
+		e.state.StockBalances.Upsert(&buyerHold)
+
+		// 매도자 잔고 증감 및 주식 출고
+		if seller, ok := e.state.Accounts.Get(sellerID); ok {
+			seller.Balance += cash
+			seller.AvailableBalance += cash
+			e.state.Accounts.Upsert(&seller)
+		}
+		if sellerHold, ok := e.state.StockBalances.Get(sellerID, order.StockId); ok {
+			sellerHold.Quantity -= filled
+			sellerHold.TotalBuyAmount -= filled * sellerHold.Average
+			if sellerHold.Quantity == 0 {
+				sellerHold.Average = 0
+				sellerHold.TotalBuyAmount = 0
+			}
+			e.state.StockBalances.Upsert(&sellerHold)
+		}
+
+		// TODO: 모두 체결되고 마지막에 한번에 작성하도록 해야함
+		// 체결 내역 발행 (Out WAL 작성)
 		trade := domain.Trade{
 			StockId:      order.StockId,
 			Price:        bestPrice,
@@ -198,14 +258,45 @@ func (e *Engine) match(order domain.Order) error {
 		}
 	}
 
-	// 잔량 호가창 등록
+	// 지정가 미체결분 호가창 등록
 	if order.FilledQuantity < order.Quantity && order.OrderType == domain.ORDER_LIMIT {
 		ob.Add(order)
 	}
 
-	// TODO: 시장가 일부 미체결일시 남은 잔량 모두 취소 처리
-	if order.FilledQuantity != order.Quantity && order.OrderType == domain.ORDER_MARKET {
+	// 시장가 미체결분 취소 및 가용 잔고 복구
+	if order.FilledQuantity < order.Quantity && order.OrderType == domain.ORDER_MARKET {
+		unfilled := order.Quantity - order.FilledQuantity
+		switch order.TradingType {
+		case domain.TRADING_BUY:
+			if acc, ok := e.state.Accounts.Get(order.AccountId); ok {
+				acc.AvailableBalance += order.Price * unfilled
+				e.state.Accounts.Upsert(&acc)
+			}
+		case domain.TRADING_SELL:
+			if holding, ok := e.state.StockBalances.Get(order.AccountId, order.StockId); ok {
+				holding.AvailableQuantity += unfilled
+				e.state.StockBalances.Upsert(&holding)
+			}
+		}
+	}
 
+	// 잠근 매수 금액과 실제 체결 금액과의 오차 보정
+	if order.TradingType == domain.TRADING_BUY {
+		locked := order.Price * order.FilledQuantity
+		if refund := locked - filledCash; refund > 0 {
+			if acc, ok := e.state.Accounts.Get(order.AccountId); ok {
+				acc.AvailableBalance += refund
+				e.state.Accounts.Upsert(&acc)
+			}
+		}
+	}
+
+	// 종목 현재가를 마지막 체결가로 갱신
+	if lastTradePrice > 0 {
+		if stock, ok := e.state.Stocks.Get(order.StockId); ok {
+			stock.Price = lastTradePrice
+			e.state.Stocks.Upsert(&stock)
+		}
 	}
 
 	// 체결 후 호가창 상태 출력 (최우선호가 ±10단계)
