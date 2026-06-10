@@ -152,6 +152,7 @@ func (e *Engine) match(order domain.Order) error {
 
 	var filledCash uint64 // 총 실 체결 금액
 	var lastTradePrice uint64
+	var trades []domain.Trade
 
 	// 모든 수량이 소진 될때까지 반복
 	for order.FilledQuantity < order.Quantity {
@@ -239,17 +240,24 @@ func (e *Engine) match(order domain.Order) error {
 			e.state.StockBalances.Upsert(&sellerHold)
 		}
 
-		// TODO: 모두 체결되고 마지막에 한번에 작성하도록 해야함
-		// 체결 내역 발행 (Out WAL 작성)
-		trade := domain.Trade{
+		// 체결 내역 추가
+		trades = append(trades, domain.Trade{
 			StockId:      order.StockId,
 			Price:        bestPrice,
 			Quantity:     filled,
 			MakerOrderId: counter.Id,
 			TakerOrderId: order.Id,
+		})
+	}
+
+	// 체결 내역 Output WAL 작성
+	if len(trades) > 0 {
+		items := make([]any, len(trades))
+		for i, tr := range trades {
+			items[i] = tr
 		}
-		if err := e.appendOutput(PatternTradeExecuted, trade); err != nil {
-			panic(fmt.Errorf("engine: append trade to output wal: %w", err))
+		if err := e.appendOutputBatch(PatternTradeExecuted, items); err != nil {
+			panic(fmt.Errorf("engine: append trades to output wal: %w", err))
 		}
 	}
 

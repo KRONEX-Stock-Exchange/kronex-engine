@@ -62,18 +62,33 @@ type outputEnvelope struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-// 형식 변환 후 Output WAL 작성
-func (e *Engine) appendOutput(pattern string, data any) error {
+// Output WAL 형태로 변환
+func marshalOutput(pattern string, data any) ([]byte, error) {
 	raw, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("marshal output data: %w", err)
+		return nil, fmt.Errorf("marshal output data: %w", err)
 	}
 	payload, err := json.Marshal(outputEnvelope{Pattern: pattern, Data: raw})
 	if err != nil {
-		return fmt.Errorf("marshal output envelope: %w", err)
+		return nil, fmt.Errorf("marshal output envelope: %w", err)
 	}
-	if _, err := e.output.Append(payload); err != nil {
-		return fmt.Errorf("append output wal: %w", err)
+	return payload, nil
+}
+
+func (e *Engine) appendOutputBatch(pattern string, datas []any) error {
+	if len(datas) == 0 {
+		return nil
+	}
+	payloads := make([][]byte, 0, len(datas))
+	for _, d := range datas {
+		payload, err := marshalOutput(pattern, d)
+		if err != nil {
+			return err
+		}
+		payloads = append(payloads, payload)
+	}
+	if _, err := e.output.AppendBatch(payloads); err != nil {
+		return fmt.Errorf("append output wal batch: %w", err)
 	}
 	return nil
 }
