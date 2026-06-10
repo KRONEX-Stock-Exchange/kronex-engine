@@ -22,6 +22,9 @@ type Engine struct {
 	input  *wal.WAL
 	output *wal.WAL
 	state  *ledger.State
+
+	inputSeq         uint64 // 현재 처리 중인 입력 WAL 인덱스
+	outputAppliedSeq uint64 // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
 }
 
 func NewEngine(con Consumer, queue string) (*Engine, error) {
@@ -35,13 +38,20 @@ func NewEngine(con Consumer, queue string) (*Engine, error) {
 		return nil, fmt.Errorf("open output wal: %w", err)
 	}
 
-	return &Engine{
+	e := &Engine{
 		con:    con,
 		queue:  queue,
 		input:  input,
 		output: output,
 		state:  ledger.NewState(),
-	}, nil
+	}
+
+	// 기존 Output WAL 로부터 복구 워터마크 적재
+	if err := e.loadOutputWatermark(); err != nil {
+		return nil, fmt.Errorf("load output watermark: %w", err)
+	}
+
+	return e, nil
 }
 
 func (e *Engine) Close() error {
@@ -58,30 +68,38 @@ type envelope struct {
 }
 
 type outputEnvelope struct {
-	Pattern string          `json:"pattern"`
-	Data    json.RawMessage `json:"data"`
+	Pattern  string          `json:"pattern"`
+	InputSeq uint64          `json:"inputSeq"` // 이 출력을 만든 입력 WAL 인덱스
+	Data     json.RawMessage `json:"data"`
 }
 
-// Output WAL 형태로 변환
-func marshalOutput(pattern string, data any) ([]byte, error) {
+// Output WAL 형태로 변환 (inputSeq = 이 출력을 만든 입력 WAL 인덱스)
+func marshalOutput(pattern string, inputSeq uint64, data any) ([]byte, error) {
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("marshal output data: %w", err)
 	}
-	payload, err := json.Marshal(outputEnvelope{Pattern: pattern, Data: raw})
+	payload, err := json.Marshal(outputEnvelope{Pattern: pattern, InputSeq: inputSeq, Data: raw})
 	if err != nil {
 		return nil, fmt.Errorf("marshal output envelope: %w", err)
 	}
 	return payload, nil
 }
 
-func (e *Engine) appendOutputBatch(pattern string, datas []any) error {
+// Output WAL 생성
+func (e *Engine) appendOutput(pattern string, datas ...any) error {
 	if len(datas) == 0 {
 		return nil
 	}
+
+	// 이벤트 복구 중 중복 Output 생성 방지
+	if e.outputAppliedSeq > 0 && e.inputSeq <= e.outputAppliedSeq {
+		return nil
+	}
+
 	payloads := make([][]byte, 0, len(datas))
 	for _, d := range datas {
-		payload, err := marshalOutput(pattern, d)
+		payload, err := marshalOutput(pattern, e.inputSeq, d)
 		if err != nil {
 			return err
 		}
@@ -93,6 +111,30 @@ func (e *Engine) appendOutputBatch(pattern string, datas []any) error {
 	return nil
 }
 
+// 마지막 Output WAL에서 마지막으로 처리된 Input WAL를
+// 읽어 복구 워터마크(outputAppliedSeq)로 설정함 출력이 비어 있으면 0
+func (e *Engine) loadOutputWatermark() error {
+	last, err := e.output.LastIndex()
+	if err != nil {
+		return fmt.Errorf("output last index: %w", err)
+	}
+	if last == 0 {
+		e.outputAppliedSeq = 0
+		return nil
+	}
+
+	data, err := e.output.Read(last)
+	if err != nil {
+		return fmt.Errorf("read output %d: %w", last, err)
+	}
+	var env outputEnvelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		return fmt.Errorf("unmarshal output envelope %d: %w", last, err)
+	}
+	e.outputAppliedSeq = env.InputSeq
+	return nil
+}
+
 func (e *Engine) handle(d Delivery) error {
 	var env envelope
 	if err := json.Unmarshal(d.Message.Payload, &env); err != nil {
@@ -100,10 +142,12 @@ func (e *Engine) handle(d Delivery) error {
 		return d.Nack(false)
 	}
 
-	// Input WAL 작성
-	if _, err := e.input.Append(d.Message.Payload); err != nil {
+	// Input WAL 작성 (인덱스를 현재 처리 시퀀스로 기록 → 출력 워터마크 기준)
+	idx, err := e.input.Append(d.Message.Payload)
+	if err != nil {
 		panic(fmt.Errorf("engine: append input wal: %w", err))
 	}
+	e.inputSeq = idx
 
 	switch env.Pattern {
 	case PatternOrderCreated:

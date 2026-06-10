@@ -9,6 +9,7 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
 
+// TODO: 큐 중복 전송으로 인한 중복 처리 막기
 func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
 	var order domain.Order
 	if err := json.Unmarshal(data, &order); err != nil {
@@ -250,17 +251,6 @@ func (e *Engine) match(order domain.Order) error {
 		})
 	}
 
-	// 체결 내역 Output WAL 작성
-	if len(trades) > 0 {
-		items := make([]any, len(trades))
-		for i, tr := range trades {
-			items[i] = tr
-		}
-		if err := e.appendOutputBatch(PatternTradeExecuted, items); err != nil {
-			panic(fmt.Errorf("engine: append trades to output wal: %w", err))
-		}
-	}
-
 	// 지정가 미체결분 호가창 등록
 	if order.FilledQuantity < order.Quantity && order.OrderType == domain.ORDER_LIMIT {
 		ob.Add(order)
@@ -299,6 +289,17 @@ func (e *Engine) match(order domain.Order) error {
 		if stock, ok := e.state.Stocks.Get(order.StockId); ok {
 			stock.Price = lastTradePrice
 			e.state.Stocks.Upsert(&stock)
+		}
+	}
+
+	// 체결 내역 Output WAL 작성
+	if len(trades) > 0 {
+		items := make([]any, len(trades))
+		for i, tr := range trades {
+			items[i] = tr
+		}
+		if err := e.appendOutput(PatternTradeExecuted, items...); err != nil {
+			panic(fmt.Errorf("engine: append trades to output wal: %w", err))
 		}
 	}
 
