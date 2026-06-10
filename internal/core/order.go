@@ -133,6 +133,21 @@ func (e *Engine) route(order domain.Order) error {
 	}
 }
 
+// 매칭 종료 후 들어온 주문의 결과 상태를 Output WAL 패턴으로 매핑한다
+//   - 전량 체결         → order.filled
+//   - 시장가 미체결 잔량  → order.canceled (호가창에 안 남음)
+//   - 그 외(지정가 잔량)  → order.open     (호가창 등록)
+func orderStatusPattern(order domain.Order) string {
+	switch {
+	case order.FilledQuantity == order.Quantity:
+		return PatternOrderFilled
+	case order.OrderType == domain.ORDER_MARKET:
+		return PatternOrderCanceled
+	default:
+		return PatternOrderOpen
+	}
+}
+
 // CONSIDER: 자전거래 관련 로직 고려해보기
 func (e *Engine) match(order domain.Order) error {
 	ob := e.state.OrderBooks.Get(order.StockId)
@@ -292,15 +307,21 @@ func (e *Engine) match(order domain.Order) error {
 		}
 	}
 
-	// 체결 내역 Output WAL 작성
-	if len(trades) > 0 {
-		items := make([]any, len(trades))
-		for i, tr := range trades {
-			items[i] = tr
-		}
-		if err := e.appendOutput(PatternTradeExecuted, items...); err != nil {
-			panic(fmt.Errorf("engine: append trades to output wal: %w", err))
-		}
+	// Output WAL 작성
+	events := make([]outEvent, 0, len(trades)+1)
+	for _, tr := range trades {
+		events = append(events, outEvent{PatternTradeExecuted, tr})
+	}
+	events = append(events, outEvent{orderStatusPattern(order), domain.OrderEvent{
+		OrderId:        order.Id,
+		AccountId:      order.AccountId,
+		StockId:        order.StockId,
+		Price:          order.Price,
+		Quantity:       order.Quantity,
+		FilledQuantity: order.FilledQuantity,
+	}})
+	if err := e.appendOutput(events...); err != nil {
+		panic(fmt.Errorf("engine: append output wal: %w", err))
 	}
 
 	// 체결 후 호가창 상태 출력 (최우선호가 ±10단계)

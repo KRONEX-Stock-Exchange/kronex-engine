@@ -12,8 +12,14 @@ import (
 )
 
 const (
-	PatternOrderCreated  = "order.created"
-	PatternTradeExecuted = "trade.executed"
+	// Input WAL: 수신 메세지 종류
+	PatternOrderCreated = "order.created"
+
+	// Output WAL: 발행 이벤트 종류
+	PatternTradeExecuted = "trade.executed" // 체결 내역
+	PatternOrderOpen     = "order.open"     // 호가창 등록(미체결/부분체결 잔량)
+	PatternOrderFilled   = "order.filled"   // 전량 체결
+	PatternOrderCanceled = "order.canceled" // 취소(시장가 미체결 잔량 등)
 )
 
 type Engine struct {
@@ -86,9 +92,14 @@ func marshalOutput(pattern string, inputSeq uint64, data any) ([]byte, error) {
 	return payload, nil
 }
 
+type outEvent struct {
+	pattern string
+	data    any
+}
+
 // Output WAL 생성
-func (e *Engine) appendOutput(pattern string, datas ...any) error {
-	if len(datas) == 0 {
+func (e *Engine) appendOutput(events ...outEvent) error {
+	if len(events) == 0 {
 		return nil
 	}
 
@@ -97,9 +108,9 @@ func (e *Engine) appendOutput(pattern string, datas ...any) error {
 		return nil
 	}
 
-	payloads := make([][]byte, 0, len(datas))
-	for _, d := range datas {
-		payload, err := marshalOutput(pattern, e.inputSeq, d)
+	payloads := make([][]byte, 0, len(events))
+	for _, ev := range events {
+		payload, err := marshalOutput(ev.pattern, e.inputSeq, ev.data)
 		if err != nil {
 			return err
 		}

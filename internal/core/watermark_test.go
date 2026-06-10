@@ -22,11 +22,11 @@ func TestOutputWatermark_SkipsReplayedAndWritesNew(t *testing.T) {
 
 	// 라이브 기록: seq=1, seq=2
 	e.inputSeq = 1
-	if err := e.appendOutput(PatternTradeExecuted, domain.Trade{TakerOrderId: 1, Quantity: 10}); err != nil {
+	if err := e.appendOutput(outEvent{PatternTradeExecuted, domain.Trade{TakerOrderId: 1, Quantity: 10}}); err != nil {
 		t.Fatalf("append seq1: %v", err)
 	}
 	e.inputSeq = 2
-	if err := e.appendOutput(PatternTradeExecuted, domain.Trade{TakerOrderId: 2, Quantity: 20}); err != nil {
+	if err := e.appendOutput(outEvent{PatternTradeExecuted, domain.Trade{TakerOrderId: 2, Quantity: 20}}); err != nil {
 		t.Fatalf("append seq2: %v", err)
 	}
 	if got := outputCount(t, e); got != 2 {
@@ -43,11 +43,11 @@ func TestOutputWatermark_SkipsReplayedAndWritesNew(t *testing.T) {
 
 	// 재생: seq=1, seq=2 는 워터마크 이하 → 스킵 (출력 개수 불변)
 	e.inputSeq = 1
-	if err := e.appendOutput(PatternTradeExecuted, domain.Trade{TakerOrderId: 1, Quantity: 10}); err != nil {
+	if err := e.appendOutput(outEvent{PatternTradeExecuted, domain.Trade{TakerOrderId: 1, Quantity: 10}}); err != nil {
 		t.Fatalf("replay seq1: %v", err)
 	}
 	e.inputSeq = 2
-	if err := e.appendOutput(PatternTradeExecuted, domain.Trade{TakerOrderId: 2, Quantity: 20}); err != nil {
+	if err := e.appendOutput(outEvent{PatternTradeExecuted, domain.Trade{TakerOrderId: 2, Quantity: 20}}); err != nil {
 		t.Fatalf("replay seq2: %v", err)
 	}
 	if got := outputCount(t, e); got != 2 {
@@ -56,7 +56,7 @@ func TestOutputWatermark_SkipsReplayedAndWritesNew(t *testing.T) {
 
 	// seq=3 은 워터마크 초과 → 기록
 	e.inputSeq = 3
-	if err := e.appendOutput(PatternTradeExecuted, domain.Trade{TakerOrderId: 3, Quantity: 30}); err != nil {
+	if err := e.appendOutput(outEvent{PatternTradeExecuted, domain.Trade{TakerOrderId: 3, Quantity: 30}}); err != nil {
 		t.Fatalf("append seq3: %v", err)
 	}
 	if got := outputCount(t, e); got != 3 {
@@ -76,7 +76,7 @@ func TestOutputWatermark_EmptyOutputNoSkip(t *testing.T) {
 	}
 
 	e.inputSeq = 1
-	if err := e.appendOutput(PatternTradeExecuted, domain.Trade{TakerOrderId: 1, Quantity: 10}); err != nil {
+	if err := e.appendOutput(outEvent{PatternTradeExecuted, domain.Trade{TakerOrderId: 1, Quantity: 10}}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	if got := outputCount(t, e); got != 1 {
