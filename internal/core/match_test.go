@@ -44,8 +44,15 @@ func readTrades(t *testing.T, e *Engine) []domain.Trade {
 		if err != nil {
 			t.Fatalf("read wal %d: %v", i, err)
 		}
+		var env outputEnvelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			t.Fatalf("unmarshal output envelope %d: %v", i, err)
+		}
+		if env.Pattern != PatternTradeExecuted {
+			t.Fatalf("output[%d] pattern = %q, want %q", i, env.Pattern, PatternTradeExecuted)
+		}
 		var tr domain.Trade
-		if err := json.Unmarshal(data, &tr); err != nil {
+		if err := json.Unmarshal(env.Data, &tr); err != nil {
 			t.Fatalf("unmarshal trade %d: %v", i, err)
 		}
 		trades = append(trades, tr)

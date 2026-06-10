@@ -248,11 +248,7 @@ func (e *Engine) match(order domain.Order) error {
 			MakerOrderId: counter.Id,
 			TakerOrderId: order.Id,
 		}
-		payload, err := json.Marshal(trade)
-		if err != nil {
-			panic(fmt.Errorf("engine: marshal trade: %w", err))
-		}
-		if _, err := e.output.Append(payload); err != nil {
+		if err := e.appendOutput(PatternTradeExecuted, trade); err != nil {
 			panic(fmt.Errorf("engine: append trade to output wal: %w", err))
 		}
 	}

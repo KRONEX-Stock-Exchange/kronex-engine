@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	PatternOrderCreated = "order.created"
+	PatternOrderCreated  = "order.created"
+	PatternTradeExecuted = "trade.executed"
 )
 
 type Engine struct {
@@ -54,6 +55,27 @@ func (e *Engine) Run(ctx context.Context) error {
 type envelope struct {
 	Pattern string          `json:"pattern"`
 	Data    json.RawMessage `json:"data"`
+}
+
+type outputEnvelope struct {
+	Pattern string          `json:"pattern"`
+	Data    json.RawMessage `json:"data"`
+}
+
+// 형식 변환 후 Output WAL 작성
+func (e *Engine) appendOutput(pattern string, data any) error {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("marshal output data: %w", err)
+	}
+	payload, err := json.Marshal(outputEnvelope{Pattern: pattern, Data: raw})
+	if err != nil {
+		return fmt.Errorf("marshal output envelope: %w", err)
+	}
+	if _, err := e.output.Append(payload); err != nil {
+		return fmt.Errorf("append output wal: %w", err)
+	}
+	return nil
 }
 
 func (e *Engine) handle(d Delivery) error {
