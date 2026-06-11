@@ -15,6 +15,10 @@ type Consumer interface {
 	Deliveries(ctx context.Context, queue string) (<-chan Delivery, error)
 }
 
+type SnapshotStore interface {
+	SaveSnapshot(ctx context.Context, state []byte, inputWalIndex uint64) error
+}
+
 type Delivery struct {
 	Message domain.Message
 	Ack     func() error

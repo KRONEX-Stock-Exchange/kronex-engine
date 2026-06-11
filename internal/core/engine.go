@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger"
@@ -23,8 +24,13 @@ const (
 	PatternOrderCanceled = "order.canceled" // 취소(시장가 미체결 잔량 등)
 )
 
-// 중복 방지 윈도우 크기
-const dedupWindow = 8192
+const dedupWindow = 8192                 // 중복 방지 윈도우 크기
+const snapshotInterval = 5 * time.Minute // 상태 스냅샷 주기
+
+type snapshotData struct {
+	state    []byte
+	inputSeq uint64
+}
 
 type Engine struct {
 	con    Consumer
@@ -32,13 +38,15 @@ type Engine struct {
 	input  *wal.WAL
 	output *wal.WAL
 	state  *ledger.State
+	store  SnapshotStore
 
-	inputSeq         uint64 // 현재 처리 중인 입력 WAL 인덱스
-	outputAppliedSeq uint64 // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
-	dedup            *dedup // 요청 종류별 최근 처리 ID (큐 재전달 중복 방지)
+	inputSeq         uint64            // 현재 처리 중인 입력 WAL 인덱스
+	outputAppliedSeq uint64            // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
+	dedup            *dedup            // 요청 종류별 최근 처리 ID (큐 재전달 중복 방지)
+	snapshots        chan snapshotData // 직렬화된 스냅샷 → DB 저장 goroutine 으로 전달
 }
 
-func NewEngine(con Consumer, queue string) (*Engine, error) {
+func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error) {
 	input, err := wal.Open("./data/wal/input", nil)
 	if err != nil {
 		return nil, fmt.Errorf("open input wal: %w", err)
@@ -50,12 +58,14 @@ func NewEngine(con Consumer, queue string) (*Engine, error) {
 	}
 
 	e := &Engine{
-		con:    con,
-		queue:  queue,
-		input:  input,
-		output: output,
-		state:  ledger.NewState(),
-		dedup:  newDedup(dedupWindow),
+		con:       con,
+		queue:     queue,
+		input:     input,
+		output:    output,
+		state:     ledger.NewState(),
+		store:     store,
+		dedup:     newDedup(dedupWindow),
+		snapshots: make(chan snapshotData, 1),
 	}
 
 	// 기존 Output WAL 에서 복구 워터마크 적재
@@ -118,6 +128,11 @@ func (e *Engine) Run(ctx context.Context) error {
 		return err
 	}
 
+	snapshotTick := time.NewTicker(snapshotInterval)
+	defer snapshotTick.Stop()
+
+	go e.runSnapshotSaver(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -128,6 +143,43 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 			if err := e.handle(d); err != nil {
 				return err
+			}
+		case <-snapshotTick.C:
+			if err := e.snapshot(); err != nil {
+				log.Printf("engine: snapshot: %v", err)
+			}
+		}
+	}
+}
+
+func (e *Engine) snapshot() error {
+	data, err := e.state.Serialize()
+	if err != nil {
+		return fmt.Errorf("serialize state: %w", err)
+	}
+	snap := snapshotData{state: data, inputSeq: e.inputSeq}
+
+	// DB Snapshot 저장
+	select {
+	case e.snapshots <- snap:
+	default:
+		log.Printf("engine: snapshot skipped (이전 저장 진행 중)")
+	}
+	return nil
+}
+
+// 직렬화된 스냅샷 DB 저장
+func (e *Engine) runSnapshotSaver(ctx context.Context) {
+	if e.store == nil {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case snap := <-e.snapshots:
+			if err := e.store.SaveSnapshot(ctx, snap.state, snap.inputSeq); err != nil {
+				log.Printf("engine: save snapshot: %v", err)
 			}
 		}
 	}
