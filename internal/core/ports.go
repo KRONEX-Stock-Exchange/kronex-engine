@@ -12,7 +12,7 @@ type Publisher interface {
 }
 
 type Consumer interface {
-	Consume(ctx context.Context, queue string, handle func(d Delivery) error) error
+	Deliveries(ctx context.Context, queue string) (<-chan Delivery, error)
 }
 
 type Delivery struct {

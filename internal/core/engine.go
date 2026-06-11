@@ -113,7 +113,24 @@ func (e *Engine) Close() error {
 }
 
 func (e *Engine) Run(ctx context.Context) error {
-	return e.con.Consume(ctx, e.queue, e.handle)
+	deliveries, err := e.con.Deliveries(ctx, e.queue)
+	if err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case d, ok := <-deliveries:
+			if !ok {
+				return nil
+			}
+			if err := e.handle(d); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 type envelope struct {
