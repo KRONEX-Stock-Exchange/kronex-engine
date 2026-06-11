@@ -210,6 +210,7 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 }
 
+// CONSIDER: 스냅샷 저장시 불필요한 WAL 삭제 로직 필요
 func (e *Engine) snapshot() error {
 	data, err := e.state.Serialize()
 	if err != nil {
