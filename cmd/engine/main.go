@@ -43,7 +43,8 @@ func main() {
 	log.Printf("connected to RabbitMQ at %s:%d", cfg.RabbitMQ.Host, cfg.RabbitMQ.Port)
 
 	// 엔진 실행
-	engine, err := core.NewEngine(mq, cfg.RabbitMQ.Queue)
+	snapStore := storage.NewSnapshotStore(db)
+	engine, err := core.NewEngine(mq, snapStore, cfg.RabbitMQ.Queue)
 	if err != nil {
 		log.Fatalf("create engine: %v", err)
 	}

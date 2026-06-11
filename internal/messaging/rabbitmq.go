@@ -62,10 +62,10 @@ func (c *Connection) Publish(ctx context.Context, msg domain.Message) error {
 	return nil
 }
 
-// 큐 메세지 수신
+// 큐 메세지 수신 채널 반환
 // NOTE: Exchange Default일 경우에는 RabbitMQ가 큐 이름을 Routing Key와 동일하게 지어줌
-func (c *Connection) Consume(ctx context.Context, queue string, handle func(core.Delivery) error) error {
-	deliveries, err := c.ch.Consume(
+func (c *Connection) Deliveries(ctx context.Context, queue string) (<-chan core.Delivery, error) {
+	amqpDeliveries, err := c.ch.Consume(
 		queue, // queue name
 		"",    // consumer tag (Auto)
 		false, // autoAck
@@ -75,31 +75,37 @@ func (c *Connection) Consume(ctx context.Context, queue string, handle func(core
 		nil,   // args
 	)
 	if err != nil {
-		return fmt.Errorf("consume from %q: %w", queue, err)
+		return nil, fmt.Errorf("consume from %q: %w", queue, err)
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case d, ok := <-deliveries:
-			if !ok {
-				return nil
-			}
-
-			del := core.Delivery{
-				Message: domain.Message{
-					RoutingKey: d.RoutingKey,
-					Payload:    d.Body,
-				},
-				Ack:  func() error { return d.Ack(false) },
-				Nack: func(requeue bool) error { return d.Nack(false, requeue) },
-			}
-			if err := handle(del); err != nil {
-				return err
+	out := make(chan core.Delivery)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case d, ok := <-amqpDeliveries:
+				if !ok {
+					return
+				}
+				del := core.Delivery{
+					Message: domain.Message{
+						RoutingKey: d.RoutingKey,
+						Payload:    d.Body,
+					},
+					Ack:  func() error { return d.Ack(false) },
+					Nack: func(requeue bool) error { return d.Nack(false, requeue) },
+				}
+				select {
+				case out <- del:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
-	}
+	}()
+	return out, nil
 }
 
 func (c *Connection) Close() error {

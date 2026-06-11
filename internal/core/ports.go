@@ -12,7 +12,12 @@ type Publisher interface {
 }
 
 type Consumer interface {
-	Consume(ctx context.Context, queue string, handle func(d Delivery) error) error
+	Deliveries(ctx context.Context, queue string) (<-chan Delivery, error)
+}
+
+type SnapshotStore interface {
+	SaveSnapshot(ctx context.Context, state []byte, inputWalIndex uint64) error
+	LatestSnapshot(ctx context.Context) (state []byte, inputWalIndex uint64, found bool, err error)
 }
 
 type Delivery struct {

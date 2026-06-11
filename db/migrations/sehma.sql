@@ -150,12 +150,10 @@ CREATE TABLE `trades` (
 -- snapshots (엔진 상태 스냅샷)
 -- =========================================================
 CREATE TABLE `snapshots` (
-  `id`                         BIGINT      NOT NULL AUTO_INCREMENT,
-  `state`                      LONGBLOB    NOT NULL,
-  `last_processed_order_id`    BIGINT      NOT NULL,
-  `last_processed_transfer_id` BIGINT      NOT NULL,
-  `last_event_id`              BIGINT      NOT NULL,
-  `created_at`                 DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `id`              BIGINT          NOT NULL AUTO_INCREMENT,
+  `state`           LONGBLOB        NOT NULL,
+  `input_wal_index` BIGINT UNSIGNED NOT NULL,
+  `created_at`      DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
