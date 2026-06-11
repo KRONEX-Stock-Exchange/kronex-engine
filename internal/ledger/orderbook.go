@@ -15,8 +15,6 @@ import (
 //////////////////////////////////////////////
 
 // NOTE: FIFO 원칙을 지키기 위해 반듯이 PushBack, ReadFront 해야합니다.
-// NOTE/TODO: 외부에서 buy, sell 필드를 직접 수정할 경우 정합성이 깨질 수 있어 비공개 필드로 전환 함
-// 추후 매칭엔진에서 주문을 조회 하고 처리 할 수 있도록 하는 함수 추가 필요
 type OrderBook struct {
 	buy        map[uint64]*list.List // Price -> Order Nodes -> Order Node
 	sell       map[uint64]*list.List
