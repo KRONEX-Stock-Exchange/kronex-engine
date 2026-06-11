@@ -122,7 +122,65 @@ func (e *Engine) Close() error {
 	return errors.Join(e.input.Close(), e.output.Close())
 }
 
+func (e *Engine) Replay(ctx context.Context) error {
+	// 최신 스냅샷 로드
+	var startIndex uint64
+	if e.store != nil {
+		state, idx, found, err := e.store.LatestSnapshot(ctx)
+		if err != nil {
+			return fmt.Errorf("load snapshot: %w", err)
+		}
+		if found {
+			if err := e.state.Restore(state); err != nil {
+				return fmt.Errorf("restore snapshot: %w", err)
+			}
+			startIndex = idx
+		}
+	}
+
+	// InputWAL 로그 재생
+	last, err := e.input.LastIndex()
+	if err != nil {
+		return fmt.Errorf("input last index: %w", err)
+	}
+	for i := startIndex + 1; i <= last; i++ {
+		data, err := e.input.Read(i)
+		if err != nil {
+			return fmt.Errorf("read input %d: %w", i, err)
+		}
+		var env envelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			return fmt.Errorf("unmarshal input envelope %d: %w", i, err)
+		}
+		switch env.Pattern {
+		case PatternOrderCreated:
+			var order domain.Order
+			if err := json.Unmarshal(env.Data, &order); err != nil {
+				return fmt.Errorf("unmarshal order %d: %w", i, err)
+			}
+			e.inputSeq = i
+
+			// 주문 유효성 검사
+			if err := e.validateOrder(order); err != nil {
+				continue
+			}
+			if err := e.route(order); err != nil {
+				return fmt.Errorf("replay route %d: %w", i, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (e *Engine) Run(ctx context.Context) error {
+	// 부팅 복구
+	log.Printf("replay: start")
+	if err := e.Replay(ctx); err != nil {
+		return fmt.Errorf("replay: %w", err)
+	}
+	log.Printf("replay: success")
+
 	deliveries, err := e.con.Deliveries(ctx, e.queue)
 	if err != nil {
 		return err

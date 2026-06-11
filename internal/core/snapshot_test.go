@@ -14,14 +14,22 @@ type saveCall struct {
 	idx   uint64
 }
 
-// SnapshotStore 페이크: 저장 호출을 채널로 알린다.
+// SnapshotStore 페이크: 저장 호출을 채널로 알리고, 로드는 미리 설정한 값을 돌려준다.
 type fakeSnapStore struct {
 	saved chan saveCall
+	// LatestSnapshot 이 돌려줄 값
+	loadState []byte
+	loadIdx   uint64
+	loadFound bool
 }
 
 func (f *fakeSnapStore) SaveSnapshot(ctx context.Context, state []byte, inputWalIndex uint64) error {
 	f.saved <- saveCall{state: append([]byte(nil), state...), idx: inputWalIndex}
 	return nil
+}
+
+func (f *fakeSnapStore) LatestSnapshot(ctx context.Context) ([]byte, uint64, bool, error) {
+	return f.loadState, f.loadIdx, f.loadFound, nil
 }
 
 // [시나리오] 상태를 시드하고 inputSeq=42 로 snapshot() 호출

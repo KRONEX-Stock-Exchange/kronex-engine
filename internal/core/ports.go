@@ -17,6 +17,7 @@ type Consumer interface {
 
 type SnapshotStore interface {
 	SaveSnapshot(ctx context.Context, state []byte, inputWalIndex uint64) error
+	LatestSnapshot(ctx context.Context) (state []byte, inputWalIndex uint64, found bool, err error)
 }
 
 type Delivery struct {
