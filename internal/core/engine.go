@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/ledger"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/wal"
 )
@@ -22,6 +23,9 @@ const (
 	PatternOrderCanceled = "order.canceled" // 취소(시장가 미체결 잔량 등)
 )
 
+// 중복 방지 윈도우 크기
+const dedupWindow = 8192
+
 type Engine struct {
 	con    Consumer
 	queue  string
@@ -31,6 +35,7 @@ type Engine struct {
 
 	inputSeq         uint64 // 현재 처리 중인 입력 WAL 인덱스
 	outputAppliedSeq uint64 // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
+	dedup            *dedup // 요청 종류별 최근 처리 ID (큐 재전달 중복 방지)
 }
 
 func NewEngine(con Consumer, queue string) (*Engine, error) {
@@ -50,14 +55,57 @@ func NewEngine(con Consumer, queue string) (*Engine, error) {
 		input:  input,
 		output: output,
 		state:  ledger.NewState(),
+		dedup:  newDedup(dedupWindow),
 	}
 
-	// 기존 Output WAL 로부터 복구 워터마크 적재
+	// 기존 Output WAL 에서 복구 워터마크 적재
 	if err := e.loadOutputWatermark(); err != nil {
 		return nil, fmt.Errorf("load output watermark: %w", err)
 	}
+	// 기존 Input WAL 에서 중복 방지 윈도우 복원
+	if err := e.loadDedup(); err != nil {
+		return nil, fmt.Errorf("load dedup window: %w", err)
+	}
 
 	return e, nil
+}
+
+// Input WAL를 읽어 dedup 복원
+func (e *Engine) loadDedup() error {
+	last, err := e.input.LastIndex()
+	if err != nil {
+		return fmt.Errorf("input last index: %w", err)
+	}
+	if last == 0 {
+		return nil
+	}
+
+	// 읽어야 하는 인덱스 구하기
+	// 만약에 last=10, window=3 이라면 8부터 읽도록
+	start := uint64(1)
+	if window := uint64(e.dedup.window); last > window {
+		start = last - window + 1
+	}
+	for i := start; i <= last; i++ {
+		data, err := e.input.Read(i)
+		if err != nil {
+			return fmt.Errorf("read input %d: %w", i, err)
+		}
+		var env envelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			return fmt.Errorf("unmarshal input envelope %d: %w", i, err)
+		}
+
+		switch env.Pattern {
+		case PatternOrderCreated:
+			var order domain.Order
+			if err := json.Unmarshal(env.Data, &order); err != nil {
+				return fmt.Errorf("unmarshal order %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, order.Id)
+		}
+	}
+	return nil
 }
 
 func (e *Engine) Close() error {
@@ -152,13 +200,6 @@ func (e *Engine) handle(d Delivery) error {
 		log.Printf("engine: decode envelope: %v", err)
 		return d.Nack(false)
 	}
-
-	// Input WAL 작성 (인덱스를 현재 처리 시퀀스로 기록 → 출력 워터마크 기준)
-	idx, err := e.input.Append(d.Message.Payload)
-	if err != nil {
-		panic(fmt.Errorf("engine: append input wal: %w", err))
-	}
-	e.inputSeq = idx
 
 	switch env.Pattern {
 	case PatternOrderCreated:

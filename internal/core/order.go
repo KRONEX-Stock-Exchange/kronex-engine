@@ -9,7 +9,6 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
 
-// TODO: 큐 중복 전송으로 인한 중복 처리 막기
 func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
 	var order domain.Order
 	if err := json.Unmarshal(data, &order); err != nil {
@@ -17,6 +16,20 @@ func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
 		return d.Nack(false)
 	}
 	log.Printf("engine: received order %+v", order)
+
+	// 만약 이미 처리한 주문 일경우 Ack 요청으로 버림
+	if e.dedup.has(PatternOrderCreated, order.Id) {
+		log.Printf("engine: duplicate order id=%d, skip", order.Id)
+		return d.Ack()
+	}
+
+	// Input WAL 작성
+	idx, err := e.input.Append(d.Message.Payload)
+	if err != nil {
+		panic(fmt.Errorf("engine: append input wal: %w", err))
+	}
+	e.inputSeq = idx
+	e.dedup.add(PatternOrderCreated, order.Id)
 
 	// 유효성 검사
 	if err := e.validateOrder(order); err != nil {
