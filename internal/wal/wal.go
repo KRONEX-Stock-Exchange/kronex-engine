@@ -41,6 +41,30 @@ func (w *WAL) Append(data []byte) (uint64, error) {
 	return index, nil
 }
 
+// WAL 작성 배치처리, 첫 레코드의 인덱스를 반환 및 datas 가 빌 경우 아무것도 쓰지 않음
+func (w *WAL) AppendBatch(datas [][]byte) (firstIndex uint64, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if len(datas) == 0 {
+		return 0, nil
+	}
+
+	last, err := w.log.LastIndex()
+	if err != nil {
+		return 0, fmt.Errorf("read last index: %w", err)
+	}
+
+	var batch twal.Batch
+	for i, data := range datas {
+		batch.Write(last+1+uint64(i), data)
+	}
+	if err := w.log.WriteBatch(&batch); err != nil {
+		return 0, fmt.Errorf("write wal batch (%d entries): %w", len(datas), err)
+	}
+	return last + 1, nil
+}
+
 func (w *WAL) Read(index uint64) ([]byte, error) {
 	data, err := w.log.Read(index)
 	if err != nil {
