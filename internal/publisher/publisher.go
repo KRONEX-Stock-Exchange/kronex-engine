@@ -24,6 +24,8 @@ type Store interface {
 type Tx interface {
 	SaveTrade(ctx context.Context, trade domain.Trade) error
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
+	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
+	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
 	Commit() error
 	Rollback() error
 }
@@ -116,21 +118,12 @@ func (p *Publisher) handleRecord(ctx context.Context, raw []byte) error {
 	return p.publish(ctx, raw)
 }
 
-type orderUpdate struct {
-	status    string
-	filledQty uint64
-}
-
 func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) error {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
-
-	// 주문별 마지막 상태만 DB 반영
-	orderUpdates := make(map[int64]orderUpdate)
-	var orderIDs []int64
 
 	for _, ev := range events {
 		switch ev.Pattern {
@@ -147,20 +140,27 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 			if err := json.Unmarshal(ev.Data, &oe); err != nil {
 				return fmt.Errorf("unmarshal order event: %w", err)
 			}
-			if _, seen := orderUpdates[oe.OrderId]; !seen {
-				orderIDs = append(orderIDs, oe.OrderId)
+			if err := tx.UpdateOrderStatus(ctx, oe.OrderId, orderStatus(ev.Pattern), oe.FilledQuantity); err != nil {
+				return err
 			}
-			orderUpdates[oe.OrderId] = orderUpdate{orderStatus(ev.Pattern), oe.FilledQuantity}
+		case core.PatternAccountUpdated:
+			var acc domain.Account
+			if err := json.Unmarshal(ev.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account: %w", err)
+			}
+			if err := tx.UpdateAccountBalance(ctx, acc.Id, acc.Balance, acc.AvailableBalance); err != nil {
+				return err
+			}
+		case core.PatternHoldingUpdated:
+			var h domain.StockBalance
+			if err := json.Unmarshal(ev.Data, &h); err != nil {
+				return fmt.Errorf("unmarshal holding: %w", err)
+			}
+			if err := tx.UpsertHolding(ctx, h); err != nil {
+				return err
+			}
 		default:
 			log.Printf("publisher: unknown pattern %q (skip)", ev.Pattern)
-		}
-	}
-
-	// 주문별 마지막 상태만 반영
-	for _, id := range orderIDs {
-		u := orderUpdates[id]
-		if err := tx.UpdateOrderStatus(ctx, id, u.status, u.filledQty); err != nil {
-			return err
 		}
 	}
 
@@ -170,6 +170,7 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 	return nil
 }
 
+// TODO: 이벤트 발행 구현하기
 func (p *Publisher) publish(ctx context.Context, raw []byte) error {
 	return p.mq.Publish(ctx, domain.Message{
 		RoutingKey: p.eventQueue,

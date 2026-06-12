@@ -91,6 +91,33 @@ func (t *eventTx) UpdateOrderStatus(ctx context.Context, orderID int64, status s
 	return nil
 }
 
+// 계좌 잔고/가용잔고 갱신
+func (t *eventTx) UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error {
+	if err := t.q.UpdateAccountBalance(ctx, sqlc.UpdateAccountBalanceParams{
+		Balance:          balance,
+		AvailableBalance: availableBalance,
+		ID:               accountID,
+	}); err != nil {
+		return fmt.Errorf("update account %d balance: %w", accountID, err)
+	}
+	return nil
+}
+
+// 보유종목 갱신 (없으면 생성)
+func (t *eventTx) UpsertHolding(ctx context.Context, h domain.StockBalance) error {
+	if err := t.q.UpsertHolding(ctx, sqlc.UpsertHoldingParams{
+		AccountID:         h.AccountId,
+		StockID:           h.StockId,
+		Quantity:          h.Quantity,
+		AvailableQuantity: h.AvailableQuantity,
+		Average:           h.Average,
+		TotalBuyAmount:    h.TotalBuyAmount,
+	}); err != nil {
+		return fmt.Errorf("upsert holding (account=%d stock=%d): %w", h.AccountId, h.StockId, err)
+	}
+	return nil
+}
+
 func (t *eventTx) Commit() error {
 	return t.tx.Commit()
 }

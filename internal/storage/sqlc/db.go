@@ -39,8 +39,14 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.saveTradeStmt, err = db.PrepareContext(ctx, saveTrade); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveTrade: %w", err)
 	}
+	if q.updateAccountBalanceStmt, err = db.PrepareContext(ctx, updateAccountBalance); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateAccountBalance: %w", err)
+	}
 	if q.updateOrderStatusStmt, err = db.PrepareContext(ctx, updateOrderStatus); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateOrderStatus: %w", err)
+	}
+	if q.upsertHoldingStmt, err = db.PrepareContext(ctx, upsertHolding); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertHolding: %w", err)
 	}
 	return &q, nil
 }
@@ -72,9 +78,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing saveTradeStmt: %w", cerr)
 		}
 	}
+	if q.updateAccountBalanceStmt != nil {
+		if cerr := q.updateAccountBalanceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateAccountBalanceStmt: %w", cerr)
+		}
+	}
 	if q.updateOrderStatusStmt != nil {
 		if cerr := q.updateOrderStatusStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateOrderStatusStmt: %w", cerr)
+		}
+	}
+	if q.upsertHoldingStmt != nil {
+		if cerr := q.upsertHoldingStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertHoldingStmt: %w", cerr)
 		}
 	}
 	return err
@@ -114,25 +130,29 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                    DBTX
-	tx                    *sql.Tx
-	latestSnapshotStmt    *sql.Stmt
-	loadCursorStmt        *sql.Stmt
-	saveCursorStmt        *sql.Stmt
-	saveSnapshotStmt      *sql.Stmt
-	saveTradeStmt         *sql.Stmt
-	updateOrderStatusStmt *sql.Stmt
+	db                       DBTX
+	tx                       *sql.Tx
+	latestSnapshotStmt       *sql.Stmt
+	loadCursorStmt           *sql.Stmt
+	saveCursorStmt           *sql.Stmt
+	saveSnapshotStmt         *sql.Stmt
+	saveTradeStmt            *sql.Stmt
+	updateAccountBalanceStmt *sql.Stmt
+	updateOrderStatusStmt    *sql.Stmt
+	upsertHoldingStmt        *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                    tx,
-		tx:                    tx,
-		latestSnapshotStmt:    q.latestSnapshotStmt,
-		loadCursorStmt:        q.loadCursorStmt,
-		saveCursorStmt:        q.saveCursorStmt,
-		saveSnapshotStmt:      q.saveSnapshotStmt,
-		saveTradeStmt:         q.saveTradeStmt,
-		updateOrderStatusStmt: q.updateOrderStatusStmt,
+		db:                       tx,
+		tx:                       tx,
+		latestSnapshotStmt:       q.latestSnapshotStmt,
+		loadCursorStmt:           q.loadCursorStmt,
+		saveCursorStmt:           q.saveCursorStmt,
+		saveSnapshotStmt:         q.saveSnapshotStmt,
+		saveTradeStmt:            q.saveTradeStmt,
+		updateAccountBalanceStmt: q.updateAccountBalanceStmt,
+		updateOrderStatusStmt:    q.updateOrderStatusStmt,
+		upsertHoldingStmt:        q.upsertHoldingStmt,
 	}
 }

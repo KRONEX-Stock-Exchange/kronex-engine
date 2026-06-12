@@ -18,10 +18,12 @@ const (
 	PatternOrderCreated = "order.created"
 
 	// Output WAL: 발행 이벤트 종류
-	PatternTradeExecuted = "trade.executed" // 체결 내역
-	PatternOrderOpen     = "order.open"     // 호가창 등록(미체결/부분체결 잔량)
-	PatternOrderFilled   = "order.filled"   // 전량 체결
-	PatternOrderCanceled = "order.canceled" // 취소(시장가 미체결 잔량 등)
+	PatternTradeExecuted  = "trade.executed"  // 체결 내역
+	PatternOrderOpen      = "order.open"      // 호가창 등록(미체결/부분체결 잔량)
+	PatternOrderFilled    = "order.filled"    // 전량 체결
+	PatternOrderCanceled  = "order.canceled"  // 취소(시장가 미체결 잔량 등)
+	PatternAccountUpdated = "account.updated" // 계좌 잔고 변동
+	PatternHoldingUpdated = "holding.updated" // 보유종목 변동
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
