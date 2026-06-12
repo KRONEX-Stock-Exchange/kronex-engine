@@ -249,23 +249,15 @@ type envelope struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-type outputEnvelope struct {
-	Pattern  string          `json:"pattern"`
-	InputSeq uint64          `json:"inputSeq"` // 이 출력을 만든 입력 WAL 인덱스
-	Data     json.RawMessage `json:"data"`
+type OutputEvent struct {
+	Pattern string          `json:"pattern"`
+	Data    json.RawMessage `json:"data"`
 }
 
-// Output WAL 형태로 변환 (inputSeq = 이 출력을 만든 입력 WAL 인덱스)
-func marshalOutput(pattern string, inputSeq uint64, data any) ([]byte, error) {
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("marshal output data: %w", err)
-	}
-	payload, err := json.Marshal(outputEnvelope{Pattern: pattern, InputSeq: inputSeq, Data: raw})
-	if err != nil {
-		return nil, fmt.Errorf("marshal output envelope: %w", err)
-	}
-	return payload, nil
+// 한 입력 주문이 만든 이벤트(체결들 + 상태)를 한 레코드로 묶은 Output WAL 봉투
+type OutputEnvelope struct {
+	InputSeq uint64        `json:"inputSeq"` // 이 출력을 만든 입력 WAL 인덱스
+	Events   []OutputEvent `json:"events"`
 }
 
 type outEvent struct {
@@ -284,17 +276,22 @@ func (e *Engine) appendOutput(events ...outEvent) error {
 		return nil
 	}
 
-	payloads := make([][]byte, 0, len(events))
+	out := make([]OutputEvent, 0, len(events))
 	for _, ev := range events {
-		payload, err := marshalOutput(ev.pattern, e.inputSeq, ev.data)
+		raw, err := json.Marshal(ev.data)
 		if err != nil {
-			return err
+			return fmt.Errorf("marshal output data: %w", err)
 		}
-		payloads = append(payloads, payload)
+		out = append(out, OutputEvent{Pattern: ev.pattern, Data: raw})
 	}
-	if _, err := e.output.AppendBatch(payloads); err != nil {
-		return fmt.Errorf("append output wal batch: %w", err)
+	payload, err := json.Marshal(OutputEnvelope{InputSeq: e.inputSeq, Events: out})
+	if err != nil {
+		return fmt.Errorf("marshal output envelope: %w", err)
 	}
+	if _, err := e.output.Append(payload); err != nil {
+		return fmt.Errorf("append output wal: %w", err)
+	}
+
 	return nil
 }
 
@@ -314,7 +311,7 @@ func (e *Engine) loadOutputWatermark() error {
 	if err != nil {
 		return fmt.Errorf("read output %d: %w", last, err)
 	}
-	var env outputEnvelope
+	var env OutputEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		return fmt.Errorf("unmarshal output envelope %d: %w", last, err)
 	}

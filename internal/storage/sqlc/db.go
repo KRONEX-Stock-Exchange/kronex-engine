@@ -27,8 +27,20 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.latestSnapshotStmt, err = db.PrepareContext(ctx, latestSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query LatestSnapshot: %w", err)
 	}
+	if q.loadCursorStmt, err = db.PrepareContext(ctx, loadCursor); err != nil {
+		return nil, fmt.Errorf("error preparing query LoadCursor: %w", err)
+	}
+	if q.saveCursorStmt, err = db.PrepareContext(ctx, saveCursor); err != nil {
+		return nil, fmt.Errorf("error preparing query SaveCursor: %w", err)
+	}
 	if q.saveSnapshotStmt, err = db.PrepareContext(ctx, saveSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveSnapshot: %w", err)
+	}
+	if q.saveTradeStmt, err = db.PrepareContext(ctx, saveTrade); err != nil {
+		return nil, fmt.Errorf("error preparing query SaveTrade: %w", err)
+	}
+	if q.updateOrderStatusStmt, err = db.PrepareContext(ctx, updateOrderStatus); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateOrderStatus: %w", err)
 	}
 	return &q, nil
 }
@@ -40,9 +52,29 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing latestSnapshotStmt: %w", cerr)
 		}
 	}
+	if q.loadCursorStmt != nil {
+		if cerr := q.loadCursorStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing loadCursorStmt: %w", cerr)
+		}
+	}
+	if q.saveCursorStmt != nil {
+		if cerr := q.saveCursorStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing saveCursorStmt: %w", cerr)
+		}
+	}
 	if q.saveSnapshotStmt != nil {
 		if cerr := q.saveSnapshotStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing saveSnapshotStmt: %w", cerr)
+		}
+	}
+	if q.saveTradeStmt != nil {
+		if cerr := q.saveTradeStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing saveTradeStmt: %w", cerr)
+		}
+	}
+	if q.updateOrderStatusStmt != nil {
+		if cerr := q.updateOrderStatusStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateOrderStatusStmt: %w", cerr)
 		}
 	}
 	return err
@@ -82,17 +114,25 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                 DBTX
-	tx                 *sql.Tx
-	latestSnapshotStmt *sql.Stmt
-	saveSnapshotStmt   *sql.Stmt
+	db                    DBTX
+	tx                    *sql.Tx
+	latestSnapshotStmt    *sql.Stmt
+	loadCursorStmt        *sql.Stmt
+	saveCursorStmt        *sql.Stmt
+	saveSnapshotStmt      *sql.Stmt
+	saveTradeStmt         *sql.Stmt
+	updateOrderStatusStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                 tx,
-		tx:                 tx,
-		latestSnapshotStmt: q.latestSnapshotStmt,
-		saveSnapshotStmt:   q.saveSnapshotStmt,
+		db:                    tx,
+		tx:                    tx,
+		latestSnapshotStmt:    q.latestSnapshotStmt,
+		loadCursorStmt:        q.loadCursorStmt,
+		saveCursorStmt:        q.saveCursorStmt,
+		saveSnapshotStmt:      q.saveSnapshotStmt,
+		saveTradeStmt:         q.saveTradeStmt,
+		updateOrderStatusStmt: q.updateOrderStatusStmt,
 	}
 }
