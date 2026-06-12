@@ -128,7 +128,7 @@ func (e *Engine) Close() error {
 
 func (e *Engine) Replay(ctx context.Context) error {
 	// 최신 스냅샷 로드
-	var startIndex uint64
+	var lastSnapshotIdx uint64
 	if e.store != nil {
 		state, idx, found, err := e.store.LatestSnapshot(ctx)
 		if err != nil {
@@ -138,16 +138,17 @@ func (e *Engine) Replay(ctx context.Context) error {
 			if err := e.state.Restore(state); err != nil {
 				return fmt.Errorf("restore snapshot: %w", err)
 			}
-			startIndex = idx
+			lastSnapshotIdx = idx
+			e.inputSeq = lastSnapshotIdx
 		}
 	}
 
 	// InputWAL 로그 재생
-	last, err := e.input.LastIndex()
+	lastIdx, err := e.input.LastIndex()
 	if err != nil {
 		return fmt.Errorf("input last index: %w", err)
 	}
-	for i := startIndex + 1; i <= last; i++ {
+	for i := lastSnapshotIdx + 1; i <= lastIdx; i++ {
 		data, err := e.input.Read(i)
 		if err != nil {
 			return fmt.Errorf("read input %d: %w", i, err)
@@ -190,9 +191,9 @@ func (e *Engine) Run(ctx context.Context) error {
 		return err
 	}
 
+	// 스냅샷 워커
 	snapshotTick := time.NewTicker(snapshotInterval)
 	defer snapshotTick.Stop()
-
 	go e.runSnapshotSaver(ctx)
 
 	for {
