@@ -1,7 +1,7 @@
 -- name: LoadCursor :one
-SELECT `index` FROM `cursor` WHERE `type` = ?;
+SELECT `index` FROM `cursors` WHERE `type` = ?;
 
 -- name: SaveCursor :exec
-INSERT INTO `cursor` (`type`, `index`)
+INSERT INTO `cursors` (`type`, `index`)
 VALUES (?, ?)
 ON DUPLICATE KEY UPDATE `index` = VALUES(`index`);

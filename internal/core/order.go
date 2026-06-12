@@ -182,6 +182,7 @@ func (e *Engine) match(order domain.Order) error {
 	var filledCash uint64 // 총 실 체결 금액
 	var lastTradePrice uint64
 	var trades []domain.Trade
+	var makerEvents []outEvent // 체결된 maker 주문 상태 이벤트
 
 	// 모든 수량이 소진 될때까지 반복
 	for order.FilledQuantity < order.Quantity {
@@ -277,6 +278,21 @@ func (e *Engine) match(order domain.Order) error {
 			MakerOrderId: counter.Id,
 			TakerOrderId: order.Id,
 		})
+
+		// maker 주문 상태 이벤트 (전량 체결 FILLED / 일부 체결 후 잔류 OPEN)
+		makerFilled := counter.FilledQuantity + filled
+		makerPattern := PatternOrderOpen
+		if makerFilled == counter.Quantity {
+			makerPattern = PatternOrderFilled
+		}
+		makerEvents = append(makerEvents, outEvent{makerPattern, domain.OrderEvent{
+			OrderId:        counter.Id,
+			AccountId:      counter.AccountId,
+			StockId:        order.StockId,
+			Price:          counter.Price,
+			Quantity:       counter.Quantity,
+			FilledQuantity: makerFilled,
+		}})
 	}
 
 	// 지정가 미체결분 호가창 등록
@@ -321,10 +337,11 @@ func (e *Engine) match(order domain.Order) error {
 	}
 
 	// Output WAL 작성
-	events := make([]outEvent, 0, len(trades)+1)
+	events := make([]outEvent, 0, len(trades)+len(makerEvents)+1)
 	for _, tr := range trades {
 		events = append(events, outEvent{PatternTradeExecuted, tr})
 	}
+	events = append(events, makerEvents...)
 	events = append(events, outEvent{orderStatusPattern(order), domain.OrderEvent{
 		OrderId:        order.Id,
 		AccountId:      order.AccountId,

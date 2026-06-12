@@ -16,7 +16,7 @@ var (
 	_ publisher.Tx    = (*eventTx)(nil)
 )
 
-const publisherCursorType = sqlc.CursorTypeMQ
+const publisherCursorType = sqlc.CursorsTypeEVENT
 
 type EventStore struct {
 	db *sql.DB

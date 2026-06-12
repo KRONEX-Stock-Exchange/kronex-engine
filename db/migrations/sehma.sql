@@ -160,8 +160,8 @@ CREATE TABLE `snapshots` (
 -- =========================================================
 -- Cursor (커서)
 -- =========================================================
-CREATE TABLE `cursor` (
-  `type`  ENUM('DB', 'MQ') NOT NULL,
-  `index` BIGINT           NOT NULL,
+CREATE TABLE `cursors` (
+  `type`  ENUM('EVENT') NOT NULL,
+  `index` BIGINT        NOT NULL,
   PRIMARY KEY (`type`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

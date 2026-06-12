@@ -44,6 +44,7 @@ type Engine struct {
 	outputAppliedSeq uint64            // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
 	dedup            *dedup            // 요청 종류별 최근 처리 ID (큐 재전달 중복 방지)
 	snapshots        chan snapshotData // 직렬화된 스냅샷 → DB 저장 goroutine 으로 전달
+	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
 func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error) {
@@ -58,14 +59,15 @@ func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error)
 	}
 
 	e := &Engine{
-		con:       con,
-		queue:     queue,
-		input:     input,
-		output:    output,
-		state:     ledger.NewState(),
-		store:     store,
-		dedup:     newDedup(dedupWindow),
-		snapshots: make(chan snapshotData, 1),
+		con:          con,
+		queue:        queue,
+		input:        input,
+		output:       output,
+		state:        ledger.NewState(),
+		store:        store,
+		dedup:        newDedup(dedupWindow),
+		snapshots:    make(chan snapshotData, 1),
+		outputSignal: make(chan struct{}, 1),
 	}
 
 	// 기존 Output WAL 에서 복구 워터마크 적재
@@ -292,7 +294,25 @@ func (e *Engine) appendOutput(events ...outEvent) error {
 		return fmt.Errorf("append output wal: %w", err)
 	}
 
+	e.notifyPublisher()
 	return nil
+}
+
+// Output WAL 공유
+func (e *Engine) Output() *wal.WAL {
+	return e.output
+}
+
+// 퍼블리셔가 받을 깨우기 신호 채널
+func (e *Engine) OutputSignal() <-chan struct{} {
+	return e.outputSignal
+}
+
+func (e *Engine) notifyPublisher() {
+	select {
+	case e.outputSignal <- struct{}{}:
+	default:
+	}
 }
 
 // 마지막 Output WAL에서 마지막으로 처리된 Input WAL를

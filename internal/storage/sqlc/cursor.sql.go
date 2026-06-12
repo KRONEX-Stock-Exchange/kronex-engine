@@ -10,10 +10,10 @@ import (
 )
 
 const loadCursor = `-- name: LoadCursor :one
-SELECT ` + "`" + `index` + "`" + ` FROM ` + "`" + `cursor` + "`" + ` WHERE ` + "`" + `type` + "`" + ` = ?
+SELECT ` + "`" + `index` + "`" + ` FROM ` + "`" + `cursors` + "`" + ` WHERE ` + "`" + `type` + "`" + ` = ?
 `
 
-func (q *Queries) LoadCursor(ctx context.Context, type_ CursorType) (int64, error) {
+func (q *Queries) LoadCursor(ctx context.Context, type_ CursorsType) (int64, error) {
 	row := q.queryRow(ctx, q.loadCursorStmt, loadCursor, type_)
 	var index int64
 	err := row.Scan(&index)
@@ -21,14 +21,14 @@ func (q *Queries) LoadCursor(ctx context.Context, type_ CursorType) (int64, erro
 }
 
 const saveCursor = `-- name: SaveCursor :exec
-INSERT INTO ` + "`" + `cursor` + "`" + ` (` + "`" + `type` + "`" + `, ` + "`" + `index` + "`" + `)
+INSERT INTO ` + "`" + `cursors` + "`" + ` (` + "`" + `type` + "`" + `, ` + "`" + `index` + "`" + `)
 VALUES (?, ?)
 ON DUPLICATE KEY UPDATE ` + "`" + `index` + "`" + ` = VALUES(` + "`" + `index` + "`" + `)
 `
 
 type SaveCursorParams struct {
-	Type  CursorType `json:"type"`
-	Index int64      `json:"index"`
+	Type  CursorsType `json:"type"`
+	Index int64       `json:"index"`
 }
 
 func (q *Queries) SaveCursor(ctx context.Context, arg SaveCursorParams) error {

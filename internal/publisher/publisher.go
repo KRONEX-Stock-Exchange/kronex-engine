@@ -128,7 +128,7 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 	}
 	defer tx.Rollback()
 
-	// 주문별 마지막 상태만 실제 DB 반영
+	// 주문별 마지막 상태만 DB 반영
 	orderUpdates := make(map[int64]orderUpdate)
 	var orderIDs []int64
 
