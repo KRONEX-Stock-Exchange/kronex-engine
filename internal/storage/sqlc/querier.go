@@ -10,7 +10,13 @@ import (
 
 type Querier interface {
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
+	LoadCursor(ctx context.Context, type_ CursorsType) (int64, error)
+	SaveCursor(ctx context.Context, arg SaveCursorParams) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
+	SaveTrade(ctx context.Context, arg SaveTradeParams) error
+	UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) error
+	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
+	UpsertHolding(ctx context.Context, arg UpsertHoldingParams) error
 }
 
 var _ Querier = (*Queries)(nil)

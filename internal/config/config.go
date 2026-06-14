@@ -20,7 +20,8 @@ type RabbitMQ struct {
 	User          string
 	Password      string
 	PrefetchCount int
-	Queue         string
+	Queue         string // 주문 수신 큐
+	EventQueue    string // 이벤트 발행 큐
 }
 
 type WAL struct {
@@ -64,6 +65,7 @@ func Load() (Config, error) {
 			Password:      env("RABBITMQ_PASSWORD", "guest"),
 			PrefetchCount: prefetch,
 			Queue:         env("RABBITMQ_QUEUE", "order_queue"),
+			EventQueue:    env("RABBITMQ_EVENT_QUEUE", "event_queue"),
 		},
 		WAL: WAL{
 			Dir: env("WAL_DIR", "./data/wal"),

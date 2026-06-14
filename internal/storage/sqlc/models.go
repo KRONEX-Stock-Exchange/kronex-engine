@@ -11,46 +11,45 @@ import (
 	"time"
 )
 
-type CursorType string
+type CursorsType string
 
 const (
-	CursorTypeDB CursorType = "DB"
-	CursorTypeMQ CursorType = "MQ"
+	CursorsTypeEVENT CursorsType = "EVENT"
 )
 
-func (e *CursorType) Scan(src interface{}) error {
+func (e *CursorsType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = CursorType(s)
+		*e = CursorsType(s)
 	case string:
-		*e = CursorType(s)
+		*e = CursorsType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for CursorType: %T", src)
+		return fmt.Errorf("unsupported scan type for CursorsType: %T", src)
 	}
 	return nil
 }
 
-type NullCursorType struct {
-	CursorType CursorType `json:"cursor_type"`
-	Valid      bool       `json:"valid"` // Valid is true if CursorType is not NULL
+type NullCursorsType struct {
+	CursorsType CursorsType `json:"cursors_type"`
+	Valid       bool        `json:"valid"` // Valid is true if CursorsType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullCursorType) Scan(value interface{}) error {
+func (ns *NullCursorsType) Scan(value interface{}) error {
 	if value == nil {
-		ns.CursorType, ns.Valid = "", false
+		ns.CursorsType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.CursorType.Scan(value)
+	return ns.CursorsType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullCursorType) Value() (driver.Value, error) {
+func (ns NullCursorsType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.CursorType), nil
+	return string(ns.CursorsType), nil
 }
 
 type OrdersOrderType string
@@ -325,8 +324,8 @@ type Account struct {
 }
 
 type Cursor struct {
-	Type  CursorType `json:"type"`
-	Index int64      `json:"index"`
+	Type  CursorsType `json:"type"`
+	Index int64       `json:"index"`
 }
 
 type Order struct {

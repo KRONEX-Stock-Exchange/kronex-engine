@@ -181,7 +181,20 @@ func (e *Engine) match(order domain.Order) error {
 
 	var filledCash uint64 // 총 실 체결 금액
 	var lastTradePrice uint64
-	var trades []domain.Trade
+	var events []outEvent // Output WAL 이벤트 (체결마다 인라인 누적)
+
+	// 잔고가 변동된 계좌 (체결 후 맨 마지막에 최종값만 이벤트로 발행)
+	var accountIDs []int32
+	seenAccount := make(map[int32]struct{})
+	trackAccount := func(id int32) {
+		if _, ok := seenAccount[id]; !ok {
+			seenAccount[id] = struct{}{}
+			accountIDs = append(accountIDs, id)
+		}
+	}
+
+	// Tracker 잔고
+	trackAccount(order.AccountId)
 
 	// 모든 수량이 소진 될때까지 반복
 	for order.FilledQuantity < order.Quantity {
@@ -269,14 +282,32 @@ func (e *Engine) match(order domain.Order) error {
 			e.state.StockBalances.Upsert(&sellerHold)
 		}
 
-		// 체결 내역 추가
-		trades = append(trades, domain.Trade{
+		// 체결 내역
+		events = append(events, outEvent{PatternTradeExecuted, domain.Trade{
 			StockId:      order.StockId,
 			Price:        bestPrice,
 			Quantity:     filled,
 			MakerOrderId: counter.Id,
 			TakerOrderId: order.Id,
-		})
+		}})
+
+		// Maker 주문 상태 (전량 체결 FILLED / 일부 체결 후 잔류 OPEN)
+		makerFilled := counter.FilledQuantity + filled
+		makerPattern := PatternOrderOpen
+		if makerFilled == counter.Quantity {
+			makerPattern = PatternOrderFilled
+		}
+		events = append(events, outEvent{makerPattern, domain.OrderEvent{
+			OrderId:        counter.Id,
+			AccountId:      counter.AccountId,
+			StockId:        order.StockId,
+			Price:          counter.Price,
+			Quantity:       counter.Quantity,
+			FilledQuantity: makerFilled,
+		}})
+
+		// Maker 잔고
+		trackAccount(counter.AccountId)
 	}
 
 	// 지정가 미체결분 호가창 등록
@@ -320,11 +351,7 @@ func (e *Engine) match(order domain.Order) error {
 		}
 	}
 
-	// Output WAL 작성
-	events := make([]outEvent, 0, len(trades)+1)
-	for _, tr := range trades {
-		events = append(events, outEvent{PatternTradeExecuted, tr})
-	}
+	// 내 주문(taker) 최종 상태
 	events = append(events, outEvent{orderStatusPattern(order), domain.OrderEvent{
 		OrderId:        order.Id,
 		AccountId:      order.AccountId,
@@ -333,11 +360,23 @@ func (e *Engine) match(order domain.Order) error {
 		Quantity:       order.Quantity,
 		FilledQuantity: order.FilledQuantity,
 	}})
+
+	// 잔고 변동 계좌 + 보유종목 최종 상태
+	for _, id := range accountIDs {
+		if acc, ok := e.state.Accounts.Get(id); ok {
+			events = append(events, outEvent{PatternAccountUpdated, acc})
+		}
+		if holding, ok := e.state.StockBalances.Get(id, order.StockId); ok {
+			events = append(events, outEvent{PatternHoldingUpdated, holding})
+		}
+	}
+
+	// Output WAL 작성
 	if err := e.appendOutput(events...); err != nil {
 		panic(fmt.Errorf("engine: append output wal: %w", err))
 	}
 
-	// 체결 후 호가창 상태 출력 (최우선호가 ±10단계)
+	// DEBUG: 체결 후 호가창 상태 출력 (최우선호가 ±10단계)
 	log.Printf("orderbook stock=%d\n%s", order.StockId, ob.Render(10))
 
 	return nil

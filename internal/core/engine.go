@@ -18,10 +18,12 @@ const (
 	PatternOrderCreated = "order.created"
 
 	// Output WAL: 발행 이벤트 종류
-	PatternTradeExecuted = "trade.executed" // 체결 내역
-	PatternOrderOpen     = "order.open"     // 호가창 등록(미체결/부분체결 잔량)
-	PatternOrderFilled   = "order.filled"   // 전량 체결
-	PatternOrderCanceled = "order.canceled" // 취소(시장가 미체결 잔량 등)
+	PatternTradeExecuted  = "trade.executed"  // 체결 내역
+	PatternOrderOpen      = "order.open"      // 호가창 등록(미체결/부분체결 잔량)
+	PatternOrderFilled    = "order.filled"    // 전량 체결
+	PatternOrderCanceled  = "order.canceled"  // 취소(시장가 미체결 잔량 등)
+	PatternAccountUpdated = "account.updated" // 계좌 잔고 변동
+	PatternHoldingUpdated = "holding.updated" // 보유종목 변동
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -44,6 +46,7 @@ type Engine struct {
 	outputAppliedSeq uint64            // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
 	dedup            *dedup            // 요청 종류별 최근 처리 ID (큐 재전달 중복 방지)
 	snapshots        chan snapshotData // 직렬화된 스냅샷 → DB 저장 goroutine 으로 전달
+	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
 func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error) {
@@ -58,14 +61,15 @@ func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error)
 	}
 
 	e := &Engine{
-		con:       con,
-		queue:     queue,
-		input:     input,
-		output:    output,
-		state:     ledger.NewState(),
-		store:     store,
-		dedup:     newDedup(dedupWindow),
-		snapshots: make(chan snapshotData, 1),
+		con:          con,
+		queue:        queue,
+		input:        input,
+		output:       output,
+		state:        ledger.NewState(),
+		store:        store,
+		dedup:        newDedup(dedupWindow),
+		snapshots:    make(chan snapshotData, 1),
+		outputSignal: make(chan struct{}, 1),
 	}
 
 	// 기존 Output WAL 에서 복구 워터마크 적재
@@ -124,7 +128,7 @@ func (e *Engine) Close() error {
 
 func (e *Engine) Replay(ctx context.Context) error {
 	// 최신 스냅샷 로드
-	var startIndex uint64
+	var lastSnapshotIdx uint64
 	if e.store != nil {
 		state, idx, found, err := e.store.LatestSnapshot(ctx)
 		if err != nil {
@@ -134,16 +138,17 @@ func (e *Engine) Replay(ctx context.Context) error {
 			if err := e.state.Restore(state); err != nil {
 				return fmt.Errorf("restore snapshot: %w", err)
 			}
-			startIndex = idx
+			lastSnapshotIdx = idx
+			e.inputSeq = lastSnapshotIdx
 		}
 	}
 
 	// InputWAL 로그 재생
-	last, err := e.input.LastIndex()
+	lastIdx, err := e.input.LastIndex()
 	if err != nil {
 		return fmt.Errorf("input last index: %w", err)
 	}
-	for i := startIndex + 1; i <= last; i++ {
+	for i := lastSnapshotIdx + 1; i <= lastIdx; i++ {
 		data, err := e.input.Read(i)
 		if err != nil {
 			return fmt.Errorf("read input %d: %w", i, err)
@@ -186,9 +191,9 @@ func (e *Engine) Run(ctx context.Context) error {
 		return err
 	}
 
+	// 스냅샷 워커
 	snapshotTick := time.NewTicker(snapshotInterval)
 	defer snapshotTick.Stop()
-
 	go e.runSnapshotSaver(ctx)
 
 	for {
@@ -249,23 +254,15 @@ type envelope struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-type outputEnvelope struct {
-	Pattern  string          `json:"pattern"`
-	InputSeq uint64          `json:"inputSeq"` // 이 출력을 만든 입력 WAL 인덱스
-	Data     json.RawMessage `json:"data"`
+type OutputEvent struct {
+	Pattern string          `json:"pattern"`
+	Data    json.RawMessage `json:"data"`
 }
 
-// Output WAL 형태로 변환 (inputSeq = 이 출력을 만든 입력 WAL 인덱스)
-func marshalOutput(pattern string, inputSeq uint64, data any) ([]byte, error) {
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("marshal output data: %w", err)
-	}
-	payload, err := json.Marshal(outputEnvelope{Pattern: pattern, InputSeq: inputSeq, Data: raw})
-	if err != nil {
-		return nil, fmt.Errorf("marshal output envelope: %w", err)
-	}
-	return payload, nil
+// 한 입력 주문이 만든 이벤트(체결들 + 상태)를 한 레코드로 묶은 Output WAL 봉투
+type OutputEnvelope struct {
+	InputSeq uint64        `json:"inputSeq"` // 이 출력을 만든 입력 WAL 인덱스
+	Events   []OutputEvent `json:"events"`
 }
 
 type outEvent struct {
@@ -284,18 +281,41 @@ func (e *Engine) appendOutput(events ...outEvent) error {
 		return nil
 	}
 
-	payloads := make([][]byte, 0, len(events))
+	out := make([]OutputEvent, 0, len(events))
 	for _, ev := range events {
-		payload, err := marshalOutput(ev.pattern, e.inputSeq, ev.data)
+		raw, err := json.Marshal(ev.data)
 		if err != nil {
-			return err
+			return fmt.Errorf("marshal output data: %w", err)
 		}
-		payloads = append(payloads, payload)
+		out = append(out, OutputEvent{Pattern: ev.pattern, Data: raw})
 	}
-	if _, err := e.output.AppendBatch(payloads); err != nil {
-		return fmt.Errorf("append output wal batch: %w", err)
+	payload, err := json.Marshal(OutputEnvelope{InputSeq: e.inputSeq, Events: out})
+	if err != nil {
+		return fmt.Errorf("marshal output envelope: %w", err)
 	}
+	if _, err := e.output.Append(payload); err != nil {
+		return fmt.Errorf("append output wal: %w", err)
+	}
+
+	e.notifyPublisher()
 	return nil
+}
+
+// Output WAL 공유
+func (e *Engine) Output() *wal.WAL {
+	return e.output
+}
+
+// 퍼블리셔가 받을 깨우기 신호 채널
+func (e *Engine) OutputSignal() <-chan struct{} {
+	return e.outputSignal
+}
+
+func (e *Engine) notifyPublisher() {
+	select {
+	case e.outputSignal <- struct{}{}:
+	default:
+	}
 }
 
 // 마지막 Output WAL에서 마지막으로 처리된 Input WAL를
@@ -314,7 +334,7 @@ func (e *Engine) loadOutputWatermark() error {
 	if err != nil {
 		return fmt.Errorf("read output %d: %w", last, err)
 	}
-	var env outputEnvelope
+	var env OutputEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		return fmt.Errorf("unmarshal output envelope %d: %w", last, err)
 	}
