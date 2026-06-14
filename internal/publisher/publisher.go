@@ -170,7 +170,6 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 	return nil
 }
 
-// TODO: 이벤트 발행 구현하기
 func (p *Publisher) publish(ctx context.Context, raw []byte) error {
 	return p.mq.Publish(ctx, domain.Message{
 		RoutingKey: p.eventQueue,
