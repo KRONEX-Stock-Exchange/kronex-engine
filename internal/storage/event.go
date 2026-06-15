@@ -111,6 +111,17 @@ func (t *eventTx) ActivateAccount(ctx context.Context, accountID int32) error {
 	return nil
 }
 
+// 종목 상태 갱신 (상장/상폐/거래정지)
+func (t *eventTx) UpdateStockStatus(ctx context.Context, stockID int32, status string) error {
+	if err := t.q.UpdateStockStatus(ctx, sqlc.UpdateStockStatusParams{
+		Status: sqlc.StocksStatus(status),
+		ID:     stockID,
+	}); err != nil {
+		return fmt.Errorf("update stock %d status: %w", stockID, err)
+	}
+	return nil
+}
+
 // 보유종목 갱신 (없으면 생성)
 func (t *eventTx) UpsertHolding(ctx context.Context, h domain.StockBalance) error {
 	if err := t.q.UpsertHolding(ctx, sqlc.UpsertHoldingParams{

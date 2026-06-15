@@ -26,6 +26,7 @@ type Tx interface {
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
 	ActivateAccount(ctx context.Context, accountID int32) error
+	UpdateStockStatus(ctx context.Context, stockID int32, status string) error
 	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
 	Commit() error
 	Rollback() error
@@ -168,6 +169,14 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 			if err := tx.UpsertHolding(ctx, h); err != nil {
 				return err
 			}
+		case core.PatternStockListed:
+			var st domain.Stock
+			if err := json.Unmarshal(ev.Data, &st); err != nil {
+				return fmt.Errorf("unmarshal stock: %w", err)
+			}
+			if err := tx.UpdateStockStatus(ctx, st.Id, stockStatus(st.Status)); err != nil {
+				return err
+			}
 		default:
 			log.Printf("publisher: unknown pattern %q (skip)", ev.Pattern)
 		}
@@ -194,5 +203,16 @@ func orderStatus(pattern string) string {
 		return "CANCELED"
 	default:
 		return "OPEN"
+	}
+}
+
+func stockStatus(s domain.StockStatus) string {
+	switch s {
+	case domain.SUSPENDED:
+		return "SUSPENDED"
+	case domain.DELISTED:
+		return "DELISTED"
+	default:
+		return "LISTED"
 	}
 }

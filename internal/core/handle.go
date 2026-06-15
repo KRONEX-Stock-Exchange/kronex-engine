@@ -8,8 +8,16 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
 
-// 큐에서 받은 입력을 패턴별 핸들러로 분기
 func (e *Engine) handle(d Delivery) error {
+	route, ok := e.routes[d.Queue]
+	if !ok {
+		log.Printf("engine: no route for queue %q", d.Queue)
+		return d.Nack(false)
+	}
+	return route(d)
+}
+
+func (e *Engine) handleData(d Delivery) error {
 	var env envelope
 	if err := json.Unmarshal(d.Message.Payload, &env); err != nil {
 		log.Printf("engine: decode envelope: %v", err)
@@ -22,7 +30,7 @@ func (e *Engine) handle(d Delivery) error {
 	case PatternAccountCreated:
 		return e.handleAccountCreated(d, env.Data)
 	default:
-		log.Printf("engine: unknown pattern %q", env.Pattern)
+		log.Printf("engine: unknown data pattern %q", env.Pattern)
 		return d.Nack(false)
 	}
 }

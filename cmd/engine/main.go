@@ -46,7 +46,10 @@ func main() {
 
 	// 엔진
 	snapStore := storage.NewSnapshotStore(db)
-	engine, err := core.NewEngine(mq, snapStore, cfg.RabbitMQ.DataQueue, cfg.RabbitMQ.AdminQueue)
+	engine, err := core.NewEngine(mq, snapStore, map[string]core.Plane{
+		cfg.RabbitMQ.DataQueue:  core.PlaneData,
+		cfg.RabbitMQ.AdminQueue: core.PlaneAdmin,
+	})
 	if err != nil {
 		log.Fatalf("create engine: %v", err)
 	}

@@ -19,6 +19,9 @@ const (
 	PatternOrderCreated   = "order.created"   // 주문
 	PatternAccountCreated = "account.created" // 계좌 등록
 
+	// Input WAL: 어드민 메세지 종류
+	PatternStockListed = "stock.listed" // 종목 상장
+
 	// Output WAL: 발행 이벤트 종류
 	PatternTradeExecuted    = "trade.executed"    // 체결 내역
 	PatternOrderOpen        = "order.open"        // 호가창 등록(미체결/부분체결 잔량)
@@ -37,9 +40,16 @@ type snapshotData struct {
 	inputSeq uint64
 }
 
+type Plane int
+
+const (
+	PlaneData  Plane = iota // 일반 요청 (계좌 등록·송금·주문)
+	PlaneAdmin              // 어드민 요청 (상장·상폐·거래정지 등)
+)
+
 type Engine struct {
 	con    Consumer
-	queues []string
+	routes map[string]func(Delivery) error // 수신 큐 → 플레인 핸들러
 	input  *wal.WAL
 	output *wal.WAL
 	state  *ledger.State
@@ -52,7 +62,7 @@ type Engine struct {
 	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
-func NewEngine(con Consumer, store SnapshotStore, queues ...string) (*Engine, error) {
+func NewEngine(con Consumer, store SnapshotStore, queues map[string]Plane) (*Engine, error) {
 	input, err := wal.Open("./data/wal/input", nil)
 	if err != nil {
 		return nil, fmt.Errorf("open input wal: %w", err)
@@ -65,7 +75,6 @@ func NewEngine(con Consumer, store SnapshotStore, queues ...string) (*Engine, er
 
 	e := &Engine{
 		con:          con,
-		queues:       queues,
 		input:        input,
 		output:       output,
 		state:        ledger.NewState(),
@@ -73,6 +82,19 @@ func NewEngine(con Consumer, store SnapshotStore, queues ...string) (*Engine, er
 		dedup:        newDedup(dedupWindow),
 		snapshots:    make(chan snapshotData, 1),
 		outputSignal: make(chan struct{}, 1),
+	}
+
+	// 큐 → 플레인 핸들러 라우팅 테이블 구성
+	e.routes = make(map[string]func(Delivery) error, len(queues))
+	for name, plane := range queues {
+		switch plane {
+		case PlaneData:
+			e.routes[name] = e.handleData
+		case PlaneAdmin:
+			e.routes[name] = e.handleAdmin
+		default:
+			return nil, fmt.Errorf("unknown plane %d for queue %q", plane, name)
+		}
 	}
 
 	// 기존 Output WAL 에서 복구 워터마크 적재
@@ -126,6 +148,12 @@ func (e *Engine) loadDedup() error {
 				return fmt.Errorf("unmarshal account %d: %w", i, err)
 			}
 			e.dedup.add(env.Pattern, int64(acc.Id))
+		case PatternStockListed:
+			var stock domain.Stock
+			if err := json.Unmarshal(env.Data, &stock); err != nil {
+				return fmt.Errorf("unmarshal stock %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, int64(stock.Id))
 		}
 	}
 	return nil
@@ -189,6 +217,13 @@ func (e *Engine) Replay(ctx context.Context) error {
 			}
 			e.inputSeq = i
 			e.activateAccount(acc)
+		case PatternStockListed:
+			var stock domain.Stock
+			if err := json.Unmarshal(env.Data, &stock); err != nil {
+				return fmt.Errorf("unmarshal stock %d: %w", i, err)
+			}
+			e.inputSeq = i
+			e.setStockStatus(stock, domain.LISTED, PatternStockListed)
 		}
 	}
 
@@ -237,13 +272,13 @@ func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
 	merged := make(chan Delivery)
 	var wg sync.WaitGroup
 
-	for _, q := range e.queues {
+	for q := range e.routes {
 		ch, err := e.con.Deliveries(ctx, q)
 		if err != nil {
 			return nil, fmt.Errorf("consume %q: %w", q, err)
 		}
 		wg.Add(1)
-		go func(ch <-chan Delivery) {
+		go func(q string, ch <-chan Delivery) {
 			defer wg.Done()
 			for {
 				select {
@@ -253,6 +288,7 @@ func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
 					if !ok {
 						return
 					}
+					d.Queue = q // 출처 큐 태깅
 					select {
 					case merged <- d:
 					case <-ctx.Done():
@@ -260,7 +296,7 @@ func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
 					}
 				}
 			}
-		}(ch)
+		}(q, ch)
 	}
 
 	go func() {

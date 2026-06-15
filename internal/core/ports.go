@@ -21,6 +21,7 @@ type SnapshotStore interface {
 }
 
 type Delivery struct {
+	Queue   string // 수신 큐 (data/admin 플레인 구분)
 	Message domain.Message
 	Ack     func() error
 	Nack    func(requeue bool) error
