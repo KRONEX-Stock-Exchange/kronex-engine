@@ -11,6 +11,48 @@ import (
 	"time"
 )
 
+type AccountsStatus string
+
+const (
+	AccountsStatusPENDING AccountsStatus = "PENDING"
+	AccountsStatusACTIVE  AccountsStatus = "ACTIVE"
+)
+
+func (e *AccountsStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AccountsStatus(s)
+	case string:
+		*e = AccountsStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AccountsStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAccountsStatus struct {
+	AccountsStatus AccountsStatus `json:"accounts_status"`
+	Valid          bool           `json:"valid"` // Valid is true if AccountsStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAccountsStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.AccountsStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AccountsStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAccountsStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AccountsStatus), nil
+}
+
 type CursorsType string
 
 const (
@@ -315,12 +357,13 @@ func (ns NullUsersRole) Value() (driver.Value, error) {
 }
 
 type Account struct {
-	ID               int32     `json:"id"`
-	UserID           int32     `json:"user_id"`
-	AccountNumber    int32     `json:"account_number"`
-	Balance          uint64    `json:"balance"`
-	AvailableBalance uint64    `json:"available_balance"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID               int32          `json:"id"`
+	UserID           int32          `json:"user_id"`
+	AccountNumber    int32          `json:"account_number"`
+	Balance          uint64         `json:"balance"`
+	AvailableBalance uint64         `json:"available_balance"`
+	Status           AccountsStatus `json:"status"`
+	CreatedAt        time.Time      `json:"created_at"`
 }
 
 type Cursor struct {

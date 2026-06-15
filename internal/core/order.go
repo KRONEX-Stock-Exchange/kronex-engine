@@ -1,55 +1,12 @@
 package core
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/bits"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
-
-func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
-	var order domain.Order
-	if err := json.Unmarshal(data, &order); err != nil {
-		log.Printf("engine: decode order: %v", err)
-		return d.Nack(false)
-	}
-	log.Printf("engine: received order %+v", order)
-
-	// 만약 이미 처리한 주문 일경우 Ack 요청으로 버림
-	if e.dedup.has(PatternOrderCreated, order.Id) {
-		log.Printf("engine: duplicate order id=%d, skip", order.Id)
-		return d.Ack()
-	}
-
-	// Input WAL 작성
-	idx, err := e.input.Append(d.Message.Payload)
-	if err != nil {
-		panic(fmt.Errorf("engine: append input wal: %w", err))
-	}
-	e.inputSeq = idx
-	e.dedup.add(PatternOrderCreated, order.Id)
-
-	// 유효성 검사
-	if err := e.validateOrder(order); err != nil {
-		log.Printf("engine: invalid order %d: %v", order.Id, err)
-
-		// TODO: 주문 현황을 업데이트 하는 별도 DB Publisher 필요
-		return d.Nack(false)
-	}
-
-	// 주문 처리
-	if err := e.route(order); err != nil {
-		log.Printf("engine: route order %d: %v", order.Id, err)
-
-		return err
-		// NOTE: 추후 자전거래 방지와 같은 별도 에러가 던져질 경우에는 Nack 처리가 필요함
-		// return d.Nack(false)
-	}
-
-	return d.Ack()
-}
 
 // 주문 유효성 검사
 func (e *Engine) validateOrder(order domain.Order) error {

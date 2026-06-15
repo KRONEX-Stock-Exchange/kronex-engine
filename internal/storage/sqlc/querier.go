@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	ActivateAccount(ctx context.Context, id int32) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	LoadCursor(ctx context.Context, type_ CursorsType) (int64, error)
 	SaveCursor(ctx context.Context, arg SaveCursorParams) error

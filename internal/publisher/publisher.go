@@ -25,6 +25,7 @@ type Tx interface {
 	SaveTrade(ctx context.Context, trade domain.Trade) error
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
+	ActivateAccount(ctx context.Context, accountID int32) error
 	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
 	Commit() error
 	Rollback() error
@@ -149,6 +150,14 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 				return fmt.Errorf("unmarshal account: %w", err)
 			}
 			if err := tx.UpdateAccountBalance(ctx, acc.Id, acc.Balance, acc.AvailableBalance); err != nil {
+				return err
+			}
+		case core.PatternAccountActivated:
+			var acc domain.Account
+			if err := json.Unmarshal(ev.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account: %w", err)
+			}
+			if err := tx.ActivateAccount(ctx, acc.Id); err != nil {
 				return err
 			}
 		case core.PatternHoldingUpdated:

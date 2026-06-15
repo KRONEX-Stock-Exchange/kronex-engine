@@ -103,6 +103,14 @@ func (t *eventTx) UpdateAccountBalance(ctx context.Context, accountID int32, bal
 	return nil
 }
 
+// 계좌 활성화 (status = ACTIVE)
+func (t *eventTx) ActivateAccount(ctx context.Context, accountID int32) error {
+	if err := t.q.ActivateAccount(ctx, accountID); err != nil {
+		return fmt.Errorf("activate account %d: %w", accountID, err)
+	}
+	return nil
+}
+
 // 보유종목 갱신 (없으면 생성)
 func (t *eventTx) UpsertHolding(ctx context.Context, h domain.StockBalance) error {
 	if err := t.q.UpsertHolding(ctx, sqlc.UpsertHoldingParams{

@@ -24,6 +24,9 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.activateAccountStmt, err = db.PrepareContext(ctx, activateAccount); err != nil {
+		return nil, fmt.Errorf("error preparing query ActivateAccount: %w", err)
+	}
 	if q.latestSnapshotStmt, err = db.PrepareContext(ctx, latestSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query LatestSnapshot: %w", err)
 	}
@@ -53,6 +56,11 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 
 func (q *Queries) Close() error {
 	var err error
+	if q.activateAccountStmt != nil {
+		if cerr := q.activateAccountStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing activateAccountStmt: %w", cerr)
+		}
+	}
 	if q.latestSnapshotStmt != nil {
 		if cerr := q.latestSnapshotStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing latestSnapshotStmt: %w", cerr)
@@ -132,6 +140,7 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                       DBTX
 	tx                       *sql.Tx
+	activateAccountStmt      *sql.Stmt
 	latestSnapshotStmt       *sql.Stmt
 	loadCursorStmt           *sql.Stmt
 	saveCursorStmt           *sql.Stmt
@@ -146,6 +155,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
 		db:                       tx,
 		tx:                       tx,
+		activateAccountStmt:      q.activateAccountStmt,
 		latestSnapshotStmt:       q.latestSnapshotStmt,
 		loadCursorStmt:           q.loadCursorStmt,
 		saveCursorStmt:           q.saveCursorStmt,

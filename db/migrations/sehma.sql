@@ -35,6 +35,7 @@ CREATE TABLE `accounts` (
   `account_number`    INT             NOT NULL,
   `balance`           BIGINT UNSIGNED NOT NULL,
   `available_balance` BIGINT UNSIGNED NOT NULL,
+  `status`            ENUM('PENDING', 'ACTIVE') NOT NULL DEFAULT 'PENDING',
   `created_at`        DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_accounts_account_number` (`account_number`),

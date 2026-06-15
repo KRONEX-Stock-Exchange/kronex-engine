@@ -15,15 +15,17 @@ import (
 
 const (
 	// Input WAL: 수신 메세지 종류
-	PatternOrderCreated = "order.created"
+	PatternOrderCreated   = "order.created"   // 주문
+	PatternAccountCreated = "account.created" // 계좌 등록
 
 	// Output WAL: 발행 이벤트 종류
-	PatternTradeExecuted  = "trade.executed"  // 체결 내역
-	PatternOrderOpen      = "order.open"      // 호가창 등록(미체결/부분체결 잔량)
-	PatternOrderFilled    = "order.filled"    // 전량 체결
-	PatternOrderCanceled  = "order.canceled"  // 취소(시장가 미체결 잔량 등)
-	PatternAccountUpdated = "account.updated" // 계좌 잔고 변동
-	PatternHoldingUpdated = "holding.updated" // 보유종목 변동
+	PatternTradeExecuted    = "trade.executed"    // 체결 내역
+	PatternOrderOpen        = "order.open"        // 호가창 등록(미체결/부분체결 잔량)
+	PatternOrderFilled      = "order.filled"      // 전량 체결
+	PatternOrderCanceled    = "order.canceled"    // 취소(시장가 미체결 잔량 등)
+	PatternAccountUpdated   = "account.updated"   // 계좌 잔고 변동
+	PatternAccountActivated = "account.activated" // 계좌 활성화
+	PatternHoldingUpdated   = "holding.updated"   // 보유종목 변동
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -117,6 +119,12 @@ func (e *Engine) loadDedup() error {
 				return fmt.Errorf("unmarshal order %d: %w", i, err)
 			}
 			e.dedup.add(env.Pattern, order.Id)
+		case PatternAccountCreated:
+			var acc domain.Account
+			if err := json.Unmarshal(env.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, int64(acc.Id))
 		}
 	}
 	return nil
@@ -157,6 +165,7 @@ func (e *Engine) Replay(ctx context.Context) error {
 		if err := json.Unmarshal(data, &env); err != nil {
 			return fmt.Errorf("unmarshal input envelope %d: %w", i, err)
 		}
+
 		switch env.Pattern {
 		case PatternOrderCreated:
 			var order domain.Order
@@ -172,6 +181,13 @@ func (e *Engine) Replay(ctx context.Context) error {
 			if err := e.route(order); err != nil {
 				return fmt.Errorf("replay route %d: %w", i, err)
 			}
+		case PatternAccountCreated:
+			var acc domain.Account
+			if err := json.Unmarshal(env.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account %d: %w", i, err)
+			}
+			e.inputSeq = i
+			e.activateAccount(acc)
 		}
 	}
 
@@ -340,20 +356,4 @@ func (e *Engine) loadOutputWatermark() error {
 	}
 	e.outputAppliedSeq = env.InputSeq
 	return nil
-}
-
-func (e *Engine) handle(d Delivery) error {
-	var env envelope
-	if err := json.Unmarshal(d.Message.Payload, &env); err != nil {
-		log.Printf("engine: decode envelope: %v", err)
-		return d.Nack(false)
-	}
-
-	switch env.Pattern {
-	case PatternOrderCreated:
-		return e.handleOrder(d, env.Data)
-	default:
-		log.Printf("engine: unknown pattern %q", env.Pattern)
-		return d.Nack(false)
-	}
 }
