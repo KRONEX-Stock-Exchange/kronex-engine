@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
@@ -38,7 +39,7 @@ type snapshotData struct {
 
 type Engine struct {
 	con    Consumer
-	queue  string
+	queues []string
 	input  *wal.WAL
 	output *wal.WAL
 	state  *ledger.State
@@ -51,7 +52,7 @@ type Engine struct {
 	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
-func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error) {
+func NewEngine(con Consumer, store SnapshotStore, queues ...string) (*Engine, error) {
 	input, err := wal.Open("./data/wal/input", nil)
 	if err != nil {
 		return nil, fmt.Errorf("open input wal: %w", err)
@@ -64,7 +65,7 @@ func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error)
 
 	e := &Engine{
 		con:          con,
-		queue:        queue,
+		queues:       queues,
 		input:        input,
 		output:       output,
 		state:        ledger.NewState(),
@@ -202,7 +203,7 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 	log.Printf("replay: success")
 
-	deliveries, err := e.con.Deliveries(ctx, e.queue)
+	deliveries, err := e.consumeAll(ctx)
 	if err != nil {
 		return err
 	}
@@ -229,6 +230,45 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// 구독 중인 모든 큐의 delivery 채널을 하나로 머지
+func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
+	merged := make(chan Delivery)
+	var wg sync.WaitGroup
+
+	for _, q := range e.queues {
+		ch, err := e.con.Deliveries(ctx, q)
+		if err != nil {
+			return nil, fmt.Errorf("consume %q: %w", q, err)
+		}
+		wg.Add(1)
+		go func(ch <-chan Delivery) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case d, ok := <-ch:
+					if !ok {
+						return
+					}
+					select {
+					case merged <- d:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}(ch)
+	}
+
+	go func() {
+		wg.Wait()
+		close(merged)
+	}()
+
+	return merged, nil
 }
 
 // CONSIDER: 스냅샷 저장시 불필요한 WAL 삭제 로직 필요
