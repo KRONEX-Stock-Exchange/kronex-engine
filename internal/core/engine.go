@@ -206,6 +206,9 @@ func (e *Engine) Replay(ctx context.Context) error {
 
 			// 주문 유효성 검사
 			if err := e.validateOrder(order); err != nil {
+				if err := e.appendReject(order, err); err != nil {
+					return fmt.Errorf("replay reject %d: %w", i, err)
+				}
 				continue
 			}
 			if err := e.route(order); err != nil {

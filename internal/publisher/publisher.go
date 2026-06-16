@@ -183,7 +183,7 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 			if err := json.Unmarshal(ev.Data, &st); err != nil {
 				return fmt.Errorf("unmarshal stock: %w", err)
 			}
-			if err := tx.UpdateStockStatus(ctx, st.Id, stockStatus(st.Status)); err != nil {
+			if err := tx.UpdateStockStatus(ctx, st.Id, st.Status.String()); err != nil {
 				return err
 			}
 		default:
@@ -215,13 +215,3 @@ func orderStatus(pattern string) string {
 	}
 }
 
-func stockStatus(s domain.StockStatus) string {
-	switch s {
-	case domain.SUSPENDED:
-		return "SUSPENDED"
-	case domain.DELISTED:
-		return "DELISTED"
-	default:
-		return "LISTED"
-	}
-}
