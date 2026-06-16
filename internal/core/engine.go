@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
@@ -15,15 +16,21 @@ import (
 
 const (
 	// Input WAL: 수신 메세지 종류
-	PatternOrderCreated = "order.created"
+	PatternOrderCreated   = "order.created"   // 주문
+	PatternAccountCreated = "account.created" // 계좌 등록
+
+	// Input WAL: 어드민 메세지 종류
+	PatternStockListed = "stock.listed" // 종목 상장
 
 	// Output WAL: 발행 이벤트 종류
-	PatternTradeExecuted  = "trade.executed"  // 체결 내역
-	PatternOrderOpen      = "order.open"      // 호가창 등록(미체결/부분체결 잔량)
-	PatternOrderFilled    = "order.filled"    // 전량 체결
-	PatternOrderCanceled  = "order.canceled"  // 취소(시장가 미체결 잔량 등)
-	PatternAccountUpdated = "account.updated" // 계좌 잔고 변동
-	PatternHoldingUpdated = "holding.updated" // 보유종목 변동
+	PatternTradeExecuted    = "trade.executed"    // 체결 내역
+	PatternOrderOpen        = "order.open"        // 호가창 등록(미체결/부분체결 잔량)
+	PatternOrderFilled      = "order.filled"      // 전량 체결
+	PatternOrderCanceled    = "order.canceled"    // 취소(시장가 미체결 잔량 등)
+	PatternOrderRejected    = "order.rejected"    // 유효성 검사 실패로 거부
+	PatternAccountUpdated   = "account.updated"   // 계좌 잔고 변동
+	PatternAccountActivated = "account.activated" // 계좌 활성화
+	PatternHoldingUpdated   = "holding.updated"   // 보유종목 변동
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -34,9 +41,16 @@ type snapshotData struct {
 	inputSeq uint64
 }
 
+type Plane int
+
+const (
+	PlaneData  Plane = iota // 일반 요청 (계좌 등록·송금·주문)
+	PlaneAdmin              // 어드민 요청 (상장·상폐·거래정지 등)
+)
+
 type Engine struct {
 	con    Consumer
-	queue  string
+	routes map[string]func(Delivery) error // 수신 큐 → 플레인 핸들러
 	input  *wal.WAL
 	output *wal.WAL
 	state  *ledger.State
@@ -49,7 +63,7 @@ type Engine struct {
 	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
-func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error) {
+func NewEngine(con Consumer, store SnapshotStore, queues map[string]Plane) (*Engine, error) {
 	input, err := wal.Open("./data/wal/input", nil)
 	if err != nil {
 		return nil, fmt.Errorf("open input wal: %w", err)
@@ -62,7 +76,6 @@ func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error)
 
 	e := &Engine{
 		con:          con,
-		queue:        queue,
 		input:        input,
 		output:       output,
 		state:        ledger.NewState(),
@@ -70,6 +83,19 @@ func NewEngine(con Consumer, store SnapshotStore, queue string) (*Engine, error)
 		dedup:        newDedup(dedupWindow),
 		snapshots:    make(chan snapshotData, 1),
 		outputSignal: make(chan struct{}, 1),
+	}
+
+	// 큐 → 플레인 핸들러 라우팅 테이블 구성
+	e.routes = make(map[string]func(Delivery) error, len(queues))
+	for name, plane := range queues {
+		switch plane {
+		case PlaneData:
+			e.routes[name] = e.handleData
+		case PlaneAdmin:
+			e.routes[name] = e.handleAdmin
+		default:
+			return nil, fmt.Errorf("unknown plane %d for queue %q", plane, name)
+		}
 	}
 
 	// 기존 Output WAL 에서 복구 워터마크 적재
@@ -117,6 +143,18 @@ func (e *Engine) loadDedup() error {
 				return fmt.Errorf("unmarshal order %d: %w", i, err)
 			}
 			e.dedup.add(env.Pattern, order.Id)
+		case PatternAccountCreated:
+			var acc domain.Account
+			if err := json.Unmarshal(env.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, int64(acc.Id))
+		case PatternStockListed:
+			var stock domain.Stock
+			if err := json.Unmarshal(env.Data, &stock); err != nil {
+				return fmt.Errorf("unmarshal stock %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, int64(stock.Id))
 		}
 	}
 	return nil
@@ -157,6 +195,7 @@ func (e *Engine) Replay(ctx context.Context) error {
 		if err := json.Unmarshal(data, &env); err != nil {
 			return fmt.Errorf("unmarshal input envelope %d: %w", i, err)
 		}
+
 		switch env.Pattern {
 		case PatternOrderCreated:
 			var order domain.Order
@@ -167,11 +206,28 @@ func (e *Engine) Replay(ctx context.Context) error {
 
 			// 주문 유효성 검사
 			if err := e.validateOrder(order); err != nil {
+				if err := e.appendReject(order, err); err != nil {
+					return fmt.Errorf("replay reject %d: %w", i, err)
+				}
 				continue
 			}
 			if err := e.route(order); err != nil {
 				return fmt.Errorf("replay route %d: %w", i, err)
 			}
+		case PatternAccountCreated:
+			var acc domain.Account
+			if err := json.Unmarshal(env.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account %d: %w", i, err)
+			}
+			e.inputSeq = i
+			e.activateAccount(acc)
+		case PatternStockListed:
+			var stock domain.Stock
+			if err := json.Unmarshal(env.Data, &stock); err != nil {
+				return fmt.Errorf("unmarshal stock %d: %w", i, err)
+			}
+			e.inputSeq = i
+			e.setStockStatus(stock, domain.LISTED, PatternStockListed)
 		}
 	}
 
@@ -186,7 +242,7 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 	log.Printf("replay: success")
 
-	deliveries, err := e.con.Deliveries(ctx, e.queue)
+	deliveries, err := e.consumeAll(ctx)
 	if err != nil {
 		return err
 	}
@@ -213,6 +269,46 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// 구독 중인 모든 큐의 delivery 채널을 하나로 머지
+func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
+	merged := make(chan Delivery)
+	var wg sync.WaitGroup
+
+	for q := range e.routes {
+		ch, err := e.con.Deliveries(ctx, q)
+		if err != nil {
+			return nil, fmt.Errorf("consume %q: %w", q, err)
+		}
+		wg.Add(1)
+		go func(q string, ch <-chan Delivery) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case d, ok := <-ch:
+					if !ok {
+						return
+					}
+					d.Queue = q // 출처 큐 태깅
+					select {
+					case merged <- d:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}(q, ch)
+	}
+
+	go func() {
+		wg.Wait()
+		close(merged)
+	}()
+
+	return merged, nil
 }
 
 // CONSIDER: 스냅샷 저장시 불필요한 WAL 삭제 로직 필요
@@ -340,20 +436,4 @@ func (e *Engine) loadOutputWatermark() error {
 	}
 	e.outputAppliedSeq = env.InputSeq
 	return nil
-}
-
-func (e *Engine) handle(d Delivery) error {
-	var env envelope
-	if err := json.Unmarshal(d.Message.Payload, &env); err != nil {
-		log.Printf("engine: decode envelope: %v", err)
-		return d.Nack(false)
-	}
-
-	switch env.Pattern {
-	case PatternOrderCreated:
-		return e.handleOrder(d, env.Data)
-	default:
-		log.Printf("engine: unknown pattern %q", env.Pattern)
-		return d.Nack(false)
-	}
 }

@@ -91,6 +91,20 @@ func (t *eventTx) UpdateOrderStatus(ctx context.Context, orderID int64, status s
 	return nil
 }
 
+// 주문 거부 처리
+func (t *eventTx) RejectOrder(ctx context.Context, orderID int64, reason string) error {
+	if err := t.q.RejectOrder(ctx, sqlc.RejectOrderParams{
+		RejectReason: sqlc.NullOrdersRejectReason{
+			OrdersRejectReason: sqlc.OrdersRejectReason(reason),
+			Valid:              true,
+		},
+		ID: orderID,
+	}); err != nil {
+		return fmt.Errorf("reject order %d: %w", orderID, err)
+	}
+	return nil
+}
+
 // 계좌 잔고/가용잔고 갱신
 func (t *eventTx) UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error {
 	if err := t.q.UpdateAccountBalance(ctx, sqlc.UpdateAccountBalanceParams{
@@ -99,6 +113,25 @@ func (t *eventTx) UpdateAccountBalance(ctx context.Context, accountID int32, bal
 		ID:               accountID,
 	}); err != nil {
 		return fmt.Errorf("update account %d balance: %w", accountID, err)
+	}
+	return nil
+}
+
+// 계좌 활성화 (status = ACTIVE)
+func (t *eventTx) ActivateAccount(ctx context.Context, accountID int32) error {
+	if err := t.q.ActivateAccount(ctx, accountID); err != nil {
+		return fmt.Errorf("activate account %d: %w", accountID, err)
+	}
+	return nil
+}
+
+// 종목 상태 갱신 (상장/상폐/거래정지)
+func (t *eventTx) UpdateStockStatus(ctx context.Context, stockID int32, status string) error {
+	if err := t.q.UpdateStockStatus(ctx, sqlc.UpdateStockStatusParams{
+		Status: sqlc.StocksStatus(status),
+		ID:     stockID,
+	}); err != nil {
+		return fmt.Errorf("update stock %d status: %w", stockID, err)
 	}
 	return nil
 }

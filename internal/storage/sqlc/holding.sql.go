@@ -28,7 +28,6 @@ type UpsertHoldingParams struct {
 	TotalBuyAmount    uint64 `json:"total_buy_amount"`
 }
 
-// 보유종목 갱신. 최초 매수면 행이 없으므로 upsert. 최종 값으로 덮어쓰므로 멱등.
 func (q *Queries) UpsertHolding(ctx context.Context, arg UpsertHoldingParams) error {
 	_, err := q.exec(ctx, q.upsertHoldingStmt, upsertHolding,
 		arg.AccountID,

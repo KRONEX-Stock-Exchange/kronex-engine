@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const activateAccount = `-- name: ActivateAccount :exec
+UPDATE accounts
+SET status = 'ACTIVE'
+WHERE id = ?
+`
+
+func (q *Queries) ActivateAccount(ctx context.Context, id int32) error {
+	_, err := q.exec(ctx, q.activateAccountStmt, activateAccount, id)
+	return err
+}
+
 const updateAccountBalance = `-- name: UpdateAccountBalance :exec
 UPDATE accounts
 SET balance = ?, available_balance = ?
@@ -21,7 +32,6 @@ type UpdateAccountBalanceParams struct {
 	ID               int32  `json:"id"`
 }
 
-// 계좌 잔고/가용잔고 갱신. 최종 값으로 덮어쓰므로 멱등.
 func (q *Queries) UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) error {
 	_, err := q.exec(ctx, q.updateAccountBalanceStmt, updateAccountBalance, arg.Balance, arg.AvailableBalance, arg.ID)
 	return err

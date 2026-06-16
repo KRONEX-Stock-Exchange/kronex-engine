@@ -24,7 +24,10 @@ type Store interface {
 type Tx interface {
 	SaveTrade(ctx context.Context, trade domain.Trade) error
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
+	RejectOrder(ctx context.Context, orderID int64, reason string) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
+	ActivateAccount(ctx context.Context, accountID int32) error
+	UpdateStockStatus(ctx context.Context, stockID int32, status string) error
 	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
 	Commit() error
 	Rollback() error
@@ -143,6 +146,14 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 			if err := tx.UpdateOrderStatus(ctx, oe.OrderId, orderStatus(ev.Pattern), oe.FilledQuantity); err != nil {
 				return err
 			}
+		case core.PatternOrderRejected:
+			var re domain.OrderRejected
+			if err := json.Unmarshal(ev.Data, &re); err != nil {
+				return fmt.Errorf("unmarshal order rejected: %w", err)
+			}
+			if err := tx.RejectOrder(ctx, re.OrderId, re.Reason); err != nil {
+				return err
+			}
 		case core.PatternAccountUpdated:
 			var acc domain.Account
 			if err := json.Unmarshal(ev.Data, &acc); err != nil {
@@ -151,12 +162,28 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 			if err := tx.UpdateAccountBalance(ctx, acc.Id, acc.Balance, acc.AvailableBalance); err != nil {
 				return err
 			}
+		case core.PatternAccountActivated:
+			var acc domain.Account
+			if err := json.Unmarshal(ev.Data, &acc); err != nil {
+				return fmt.Errorf("unmarshal account: %w", err)
+			}
+			if err := tx.ActivateAccount(ctx, acc.Id); err != nil {
+				return err
+			}
 		case core.PatternHoldingUpdated:
 			var h domain.StockBalance
 			if err := json.Unmarshal(ev.Data, &h); err != nil {
 				return fmt.Errorf("unmarshal holding: %w", err)
 			}
 			if err := tx.UpsertHolding(ctx, h); err != nil {
+				return err
+			}
+		case core.PatternStockListed:
+			var st domain.Stock
+			if err := json.Unmarshal(ev.Data, &st); err != nil {
+				return fmt.Errorf("unmarshal stock: %w", err)
+			}
+			if err := tx.UpdateStockStatus(ctx, st.Id, st.Status.String()); err != nil {
 				return err
 			}
 		default:
@@ -187,3 +214,4 @@ func orderStatus(pattern string) string {
 		return "OPEN"
 	}
 }
+

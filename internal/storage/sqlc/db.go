@@ -24,11 +24,17 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.activateAccountStmt, err = db.PrepareContext(ctx, activateAccount); err != nil {
+		return nil, fmt.Errorf("error preparing query ActivateAccount: %w", err)
+	}
 	if q.latestSnapshotStmt, err = db.PrepareContext(ctx, latestSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query LatestSnapshot: %w", err)
 	}
 	if q.loadCursorStmt, err = db.PrepareContext(ctx, loadCursor); err != nil {
 		return nil, fmt.Errorf("error preparing query LoadCursor: %w", err)
+	}
+	if q.rejectOrderStmt, err = db.PrepareContext(ctx, rejectOrder); err != nil {
+		return nil, fmt.Errorf("error preparing query RejectOrder: %w", err)
 	}
 	if q.saveCursorStmt, err = db.PrepareContext(ctx, saveCursor); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveCursor: %w", err)
@@ -45,6 +51,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateOrderStatusStmt, err = db.PrepareContext(ctx, updateOrderStatus); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateOrderStatus: %w", err)
 	}
+	if q.updateStockStatusStmt, err = db.PrepareContext(ctx, updateStockStatus); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateStockStatus: %w", err)
+	}
 	if q.upsertHoldingStmt, err = db.PrepareContext(ctx, upsertHolding); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertHolding: %w", err)
 	}
@@ -53,6 +62,11 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 
 func (q *Queries) Close() error {
 	var err error
+	if q.activateAccountStmt != nil {
+		if cerr := q.activateAccountStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing activateAccountStmt: %w", cerr)
+		}
+	}
 	if q.latestSnapshotStmt != nil {
 		if cerr := q.latestSnapshotStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing latestSnapshotStmt: %w", cerr)
@@ -61,6 +75,11 @@ func (q *Queries) Close() error {
 	if q.loadCursorStmt != nil {
 		if cerr := q.loadCursorStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing loadCursorStmt: %w", cerr)
+		}
+	}
+	if q.rejectOrderStmt != nil {
+		if cerr := q.rejectOrderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing rejectOrderStmt: %w", cerr)
 		}
 	}
 	if q.saveCursorStmt != nil {
@@ -86,6 +105,11 @@ func (q *Queries) Close() error {
 	if q.updateOrderStatusStmt != nil {
 		if cerr := q.updateOrderStatusStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateOrderStatusStmt: %w", cerr)
+		}
+	}
+	if q.updateStockStatusStmt != nil {
+		if cerr := q.updateStockStatusStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateStockStatusStmt: %w", cerr)
 		}
 	}
 	if q.upsertHoldingStmt != nil {
@@ -132,13 +156,16 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                       DBTX
 	tx                       *sql.Tx
+	activateAccountStmt      *sql.Stmt
 	latestSnapshotStmt       *sql.Stmt
 	loadCursorStmt           *sql.Stmt
+	rejectOrderStmt          *sql.Stmt
 	saveCursorStmt           *sql.Stmt
 	saveSnapshotStmt         *sql.Stmt
 	saveTradeStmt            *sql.Stmt
 	updateAccountBalanceStmt *sql.Stmt
 	updateOrderStatusStmt    *sql.Stmt
+	updateStockStatusStmt    *sql.Stmt
 	upsertHoldingStmt        *sql.Stmt
 }
 
@@ -146,13 +173,16 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
 		db:                       tx,
 		tx:                       tx,
+		activateAccountStmt:      q.activateAccountStmt,
 		latestSnapshotStmt:       q.latestSnapshotStmt,
 		loadCursorStmt:           q.loadCursorStmt,
+		rejectOrderStmt:          q.rejectOrderStmt,
 		saveCursorStmt:           q.saveCursorStmt,
 		saveSnapshotStmt:         q.saveSnapshotStmt,
 		saveTradeStmt:            q.saveTradeStmt,
 		updateAccountBalanceStmt: q.updateAccountBalanceStmt,
 		updateOrderStatusStmt:    q.updateOrderStatusStmt,
+		updateStockStatusStmt:    q.updateStockStatusStmt,
 		upsertHoldingStmt:        q.upsertHoldingStmt,
 	}
 }

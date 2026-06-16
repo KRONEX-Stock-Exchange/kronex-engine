@@ -1,7 +1,7 @@
 package core
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/bits"
@@ -9,52 +9,48 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
 
-func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
-	var order domain.Order
-	if err := json.Unmarshal(data, &order); err != nil {
-		log.Printf("engine: decode order: %v", err)
-		return d.Nack(false)
+type RejectReason string
+
+const (
+	RejectInvalidOrder        RejectReason = "INVALID_ORDER"
+	RejectInsufficientBalance RejectReason = "INSUFFICIENT_BALANCE"
+	RejectInsufficientStock   RejectReason = "INSUFFICIENT_STOCK"
+	RejectStockNotTradable    RejectReason = "STOCK_NOT_TRADABLE"
+)
+
+type RejectError struct {
+	Reason RejectReason
+	err    error
+}
+
+func (e *RejectError) Error() string { return e.err.Error() }
+func (e *RejectError) Unwrap() error { return e.err }
+
+func reject(reason RejectReason, format string, a ...any) *RejectError {
+	return &RejectError{Reason: reason, err: fmt.Errorf(format, a...)}
+}
+
+// err에서 거부 사유 추출 (타입 불명 시 INVALID_ORDER)
+func rejectReasonOf(err error) RejectReason {
+	var re *RejectError
+	if errors.As(err, &re) {
+		return re.Reason
 	}
-	log.Printf("engine: received order %+v", order)
+	return RejectInvalidOrder
+}
 
-	// 만약 이미 처리한 주문 일경우 Ack 요청으로 버림
-	if e.dedup.has(PatternOrderCreated, order.Id) {
-		log.Printf("engine: duplicate order id=%d, skip", order.Id)
-		return d.Ack()
-	}
-
-	// Input WAL 작성
-	idx, err := e.input.Append(d.Message.Payload)
-	if err != nil {
-		panic(fmt.Errorf("engine: append input wal: %w", err))
-	}
-	e.inputSeq = idx
-	e.dedup.add(PatternOrderCreated, order.Id)
-
-	// 유효성 검사
-	if err := e.validateOrder(order); err != nil {
-		log.Printf("engine: invalid order %d: %v", order.Id, err)
-
-		// TODO: 주문 현황을 업데이트 하는 별도 DB Publisher 필요
-		return d.Nack(false)
-	}
-
-	// 주문 처리
-	if err := e.route(order); err != nil {
-		log.Printf("engine: route order %d: %v", order.Id, err)
-
-		return err
-		// NOTE: 추후 자전거래 방지와 같은 별도 에러가 던져질 경우에는 Nack 처리가 필요함
-		// return d.Nack(false)
-	}
-
-	return d.Ack()
+// 거부를 Output WAL에 기록 → publisher가 DB에 REJECTED 반영 및 이벤트 발행
+func (e *Engine) appendReject(order domain.Order, err error) error {
+	return e.appendOutput(outEvent{PatternOrderRejected, domain.OrderRejected{
+		OrderId: order.Id,
+		Reason:  string(rejectReasonOf(err)),
+	}})
 }
 
 // 주문 유효성 검사
 func (e *Engine) validateOrder(order domain.Order) error {
 	if order.Id <= 0 {
-		return fmt.Errorf("invalid order id %d", order.Id)
+		return reject(RejectInvalidOrder, "invalid order id %d", order.Id)
 	}
 
 	switch order.TradingType {
@@ -62,11 +58,11 @@ func (e *Engine) validateOrder(order domain.Order) error {
 		return e.validateTrade(order)
 	case domain.TRADING_EDIT, domain.TRADING_CANCEL:
 		if order.TargetId <= 0 {
-			return fmt.Errorf("invalid target id %d", order.TargetId)
+			return reject(RejectInvalidOrder, "invalid target id %d", order.TargetId)
 		}
 		return nil
 	default:
-		return fmt.Errorf("unknown trading type %d", order.TradingType)
+		return reject(RejectInvalidOrder, "unknown trading type %d", order.TradingType)
 	}
 }
 
@@ -75,28 +71,28 @@ func (e *Engine) validateOrder(order domain.Order) error {
 // CONSIDER: 상하한가 검사 추가
 func (e *Engine) validateTrade(order domain.Order) error {
 	if order.Quantity == 0 || order.FilledQuantity != 0 {
-		return fmt.Errorf("invalid quantity (quantity=%d, filledQuantity=%d)", order.Quantity, order.FilledQuantity)
+		return reject(RejectInvalidOrder, "invalid quantity (quantity=%d, filledQuantity=%d)", order.Quantity, order.FilledQuantity)
 	}
 	if order.OrderType != domain.ORDER_LIMIT && order.OrderType != domain.ORDER_MARKET {
-		return fmt.Errorf("unsupported order type")
+		return reject(RejectInvalidOrder, "unsupported order type")
 	}
 	if order.Price == 0 {
-		return fmt.Errorf("rder price must be greater than 0")
+		return reject(RejectInvalidOrder, "order price must be greater than 0")
 	}
 
 	// 원장 상태 존재 여부 검사
 	account, ok := e.state.Accounts.Get(order.AccountId)
 	if !ok {
-		return fmt.Errorf("account %d does not exist", order.AccountId)
+		return reject(RejectInvalidOrder, "account %d does not exist", order.AccountId)
 	}
 	stock, ok := e.state.Stocks.Get(order.StockId)
 	if !ok {
-		return fmt.Errorf("stock %d does not exist", order.StockId)
+		return reject(RejectInvalidOrder, "stock %d does not exist", order.StockId)
 	}
 
 	// 거래 가능(상장) 상태인지
 	if stock.Status != domain.LISTED {
-		return fmt.Errorf("stock %d is not tradable (status=%d)", order.StockId, stock.Status)
+		return reject(RejectStockNotTradable, "stock %d is not tradable (status=%d)", order.StockId, stock.Status)
 	}
 
 	switch order.TradingType {
@@ -112,10 +108,10 @@ func (e *Engine) validateTrade(order domain.Order) error {
 func validateBuyingPower(order domain.Order, account domain.Account) error {
 	hi, cost := bits.Mul64(order.Price, order.Quantity)
 	if hi != 0 {
-		return fmt.Errorf("order cost overflow (price=%d qty=%d)", order.Price, order.Quantity)
+		return reject(RejectInvalidOrder, "order cost overflow (price=%d qty=%d)", order.Price, order.Quantity)
 	}
 	if account.AvailableBalance < cost {
-		return fmt.Errorf("insufficient balance: need %d, available %d", cost, account.AvailableBalance)
+		return reject(RejectInsufficientBalance, "insufficient balance: need %d, available %d", cost, account.AvailableBalance)
 	}
 
 	return nil
@@ -125,10 +121,10 @@ func validateBuyingPower(order domain.Order, account domain.Account) error {
 func (e *Engine) validateSellable(order domain.Order) error {
 	holding, ok := e.state.StockBalances.Get(order.AccountId, order.StockId)
 	if !ok {
-		return fmt.Errorf("account %d holds no stock %d", order.AccountId, order.StockId)
+		return reject(RejectInsufficientStock, "account %d holds no stock %d", order.AccountId, order.StockId)
 	}
 	if holding.AvailableQuantity < order.Quantity {
-		return fmt.Errorf("insufficient stock: have %d, want to sell %d", holding.AvailableQuantity, order.Quantity)
+		return reject(RejectInsufficientStock, "insufficient stock: have %d, want to sell %d", holding.AvailableQuantity, order.Quantity)
 	}
 	return nil
 }
