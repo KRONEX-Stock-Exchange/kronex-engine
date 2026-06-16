@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const rejectOrder = `-- name: RejectOrder :exec
+UPDATE orders
+SET status = 'REJECTED', reject_reason = ?
+WHERE id = ?
+`
+
+type RejectOrderParams struct {
+	RejectReason NullOrdersRejectReason `json:"reject_reason"`
+	ID           int64                  `json:"id"`
+}
+
+func (q *Queries) RejectOrder(ctx context.Context, arg RejectOrderParams) error {
+	_, err := q.exec(ctx, q.rejectOrderStmt, rejectOrder, arg.RejectReason, arg.ID)
+	return err
+}
+
 const updateOrderStatus = `-- name: UpdateOrderStatus :exec
 UPDATE orders
 SET status = ?, filled_quantity = ?

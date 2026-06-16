@@ -12,6 +12,7 @@ type Querier interface {
 	ActivateAccount(ctx context.Context, id int32) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	LoadCursor(ctx context.Context, type_ CursorsType) (int64, error)
+	RejectOrder(ctx context.Context, arg RejectOrderParams) error
 	SaveCursor(ctx context.Context, arg SaveCursorParams) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
 	SaveTrade(ctx context.Context, arg SaveTradeParams) error

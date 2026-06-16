@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
@@ -61,8 +62,21 @@ func (e *Engine) handleOrder(d Delivery, data json.RawMessage) error {
 	if err := e.validateOrder(order); err != nil {
 		log.Printf("engine: invalid order %d: %v", order.Id, err)
 
-		// TODO: 주문 현황을 업데이트 하는 별도 DB Publisher 필요
-		return d.Nack(false)
+		// 거부 사유를 추출
+		reason := RejectInvalidOrder
+		var re *RejectError
+		if errors.As(err, &re) {
+			reason = re.Reason
+		}
+
+		// 거부를 Output WAL에 기록
+		if err := e.appendOutput(outEvent{PatternOrderRejected, domain.OrderRejected{
+			OrderId: order.Id,
+			Reason:  string(reason),
+		}}); err != nil {
+			panic(fmt.Errorf("engine: append output wal: %w", err))
+		}
+		return d.Ack()
 	}
 
 	// 주문 처리

@@ -91,6 +91,20 @@ func (t *eventTx) UpdateOrderStatus(ctx context.Context, orderID int64, status s
 	return nil
 }
 
+// 주문 거부 처리
+func (t *eventTx) RejectOrder(ctx context.Context, orderID int64, reason string) error {
+	if err := t.q.RejectOrder(ctx, sqlc.RejectOrderParams{
+		RejectReason: sqlc.NullOrdersRejectReason{
+			OrdersRejectReason: sqlc.OrdersRejectReason(reason),
+			Valid:              true,
+		},
+		ID: orderID,
+	}); err != nil {
+		return fmt.Errorf("reject order %d: %w", orderID, err)
+	}
+	return nil
+}
+
 // 계좌 잔고/가용잔고 갱신
 func (t *eventTx) UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error {
 	if err := t.q.UpdateAccountBalance(ctx, sqlc.UpdateAccountBalanceParams{

@@ -24,6 +24,7 @@ type Store interface {
 type Tx interface {
 	SaveTrade(ctx context.Context, trade domain.Trade) error
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
+	RejectOrder(ctx context.Context, orderID int64, reason string) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
 	ActivateAccount(ctx context.Context, accountID int32) error
 	UpdateStockStatus(ctx context.Context, stockID int32, status string) error
@@ -143,6 +144,14 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 				return fmt.Errorf("unmarshal order event: %w", err)
 			}
 			if err := tx.UpdateOrderStatus(ctx, oe.OrderId, orderStatus(ev.Pattern), oe.FilledQuantity); err != nil {
+				return err
+			}
+		case core.PatternOrderRejected:
+			var re domain.OrderRejected
+			if err := json.Unmarshal(ev.Data, &re); err != nil {
+				return fmt.Errorf("unmarshal order rejected: %w", err)
+			}
+			if err := tx.RejectOrder(ctx, re.OrderId, re.Reason); err != nil {
 				return err
 			}
 		case core.PatternAccountUpdated:

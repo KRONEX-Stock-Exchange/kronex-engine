@@ -139,6 +139,7 @@ func (ns NullOrdersOrderType) Value() (driver.Value, error) {
 type OrdersRejectReason string
 
 const (
+	OrdersRejectReasonINVALIDORDER        OrdersRejectReason = "INVALID_ORDER"
 	OrdersRejectReasonINSUFFICIENTBALANCE OrdersRejectReason = "INSUFFICIENT_BALANCE"
 	OrdersRejectReasonINSUFFICIENTSTOCK   OrdersRejectReason = "INSUFFICIENT_STOCK"
 	OrdersRejectReasonPRICEOUTOFLIMIT     OrdersRejectReason = "PRICE_OUT_OF_LIMIT"
@@ -274,6 +275,7 @@ func (ns NullOrdersTradingType) Value() (driver.Value, error) {
 type StocksStatus string
 
 const (
+	StocksStatusPENDING   StocksStatus = "PENDING"
 	StocksStatusLISTED    StocksStatus = "LISTED"
 	StocksStatusSUSPENDED StocksStatus = "SUSPENDED"
 	StocksStatusDELISTED  StocksStatus = "DELISTED"

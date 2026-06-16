@@ -8,10 +8,31 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
 
+type RejectReason string
+
+const (
+	RejectInvalidOrder        RejectReason = "INVALID_ORDER"
+	RejectInsufficientBalance RejectReason = "INSUFFICIENT_BALANCE"
+	RejectInsufficientStock   RejectReason = "INSUFFICIENT_STOCK"
+	RejectStockNotTradable    RejectReason = "STOCK_NOT_TRADABLE"
+)
+
+type RejectError struct {
+	Reason RejectReason
+	err    error
+}
+
+func (e *RejectError) Error() string { return e.err.Error() }
+func (e *RejectError) Unwrap() error { return e.err }
+
+func reject(reason RejectReason, format string, a ...any) *RejectError {
+	return &RejectError{Reason: reason, err: fmt.Errorf(format, a...)}
+}
+
 // 주문 유효성 검사
 func (e *Engine) validateOrder(order domain.Order) error {
 	if order.Id <= 0 {
-		return fmt.Errorf("invalid order id %d", order.Id)
+		return reject(RejectInvalidOrder, "invalid order id %d", order.Id)
 	}
 
 	switch order.TradingType {
@@ -19,11 +40,11 @@ func (e *Engine) validateOrder(order domain.Order) error {
 		return e.validateTrade(order)
 	case domain.TRADING_EDIT, domain.TRADING_CANCEL:
 		if order.TargetId <= 0 {
-			return fmt.Errorf("invalid target id %d", order.TargetId)
+			return reject(RejectInvalidOrder, "invalid target id %d", order.TargetId)
 		}
 		return nil
 	default:
-		return fmt.Errorf("unknown trading type %d", order.TradingType)
+		return reject(RejectInvalidOrder, "unknown trading type %d", order.TradingType)
 	}
 }
 
@@ -32,28 +53,28 @@ func (e *Engine) validateOrder(order domain.Order) error {
 // CONSIDER: 상하한가 검사 추가
 func (e *Engine) validateTrade(order domain.Order) error {
 	if order.Quantity == 0 || order.FilledQuantity != 0 {
-		return fmt.Errorf("invalid quantity (quantity=%d, filledQuantity=%d)", order.Quantity, order.FilledQuantity)
+		return reject(RejectInvalidOrder, "invalid quantity (quantity=%d, filledQuantity=%d)", order.Quantity, order.FilledQuantity)
 	}
 	if order.OrderType != domain.ORDER_LIMIT && order.OrderType != domain.ORDER_MARKET {
-		return fmt.Errorf("unsupported order type")
+		return reject(RejectInvalidOrder, "unsupported order type")
 	}
 	if order.Price == 0 {
-		return fmt.Errorf("rder price must be greater than 0")
+		return reject(RejectInvalidOrder, "order price must be greater than 0")
 	}
 
 	// 원장 상태 존재 여부 검사
 	account, ok := e.state.Accounts.Get(order.AccountId)
 	if !ok {
-		return fmt.Errorf("account %d does not exist", order.AccountId)
+		return reject(RejectInvalidOrder, "account %d does not exist", order.AccountId)
 	}
 	stock, ok := e.state.Stocks.Get(order.StockId)
 	if !ok {
-		return fmt.Errorf("stock %d does not exist", order.StockId)
+		return reject(RejectInvalidOrder, "stock %d does not exist", order.StockId)
 	}
 
 	// 거래 가능(상장) 상태인지
 	if stock.Status != domain.LISTED {
-		return fmt.Errorf("stock %d is not tradable (status=%d)", order.StockId, stock.Status)
+		return reject(RejectStockNotTradable, "stock %d is not tradable (status=%d)", order.StockId, stock.Status)
 	}
 
 	switch order.TradingType {
@@ -69,10 +90,10 @@ func (e *Engine) validateTrade(order domain.Order) error {
 func validateBuyingPower(order domain.Order, account domain.Account) error {
 	hi, cost := bits.Mul64(order.Price, order.Quantity)
 	if hi != 0 {
-		return fmt.Errorf("order cost overflow (price=%d qty=%d)", order.Price, order.Quantity)
+		return reject(RejectInvalidOrder, "order cost overflow (price=%d qty=%d)", order.Price, order.Quantity)
 	}
 	if account.AvailableBalance < cost {
-		return fmt.Errorf("insufficient balance: need %d, available %d", cost, account.AvailableBalance)
+		return reject(RejectInsufficientBalance, "insufficient balance: need %d, available %d", cost, account.AvailableBalance)
 	}
 
 	return nil
@@ -82,10 +103,10 @@ func validateBuyingPower(order domain.Order, account domain.Account) error {
 func (e *Engine) validateSellable(order domain.Order) error {
 	holding, ok := e.state.StockBalances.Get(order.AccountId, order.StockId)
 	if !ok {
-		return fmt.Errorf("account %d holds no stock %d", order.AccountId, order.StockId)
+		return reject(RejectInsufficientStock, "account %d holds no stock %d", order.AccountId, order.StockId)
 	}
 	if holding.AvailableQuantity < order.Quantity {
-		return fmt.Errorf("insufficient stock: have %d, want to sell %d", holding.AvailableQuantity, order.Quantity)
+		return reject(RejectInsufficientStock, "insufficient stock: have %d, want to sell %d", holding.AvailableQuantity, order.Quantity)
 	}
 	return nil
 }
