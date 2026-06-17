@@ -372,9 +372,6 @@ func (e *Engine) match(order domain.Order) error {
 		panic(fmt.Errorf("engine: append output wal: %w", err))
 	}
 
-	// DEBUG: 체결 후 호가창 상태 출력 (최우선호가 ±10단계)
-	log.Printf("orderbook stock=%d\n%s", order.StockId, ob.Render(10))
-
 	return nil
 }
 
