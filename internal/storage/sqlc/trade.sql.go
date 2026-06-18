@@ -7,21 +7,23 @@ package sqlc
 
 import (
 	"context"
+	"time"
 )
 
 const saveTrade = `-- name: SaveTrade :exec
-INSERT INTO trades (id, stock_id, price, quantity, maker_order_id, taker_order_id)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO trades (id, stock_id, price, quantity, maker_order_id, taker_order_id, matched_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE id = id
 `
 
 type SaveTradeParams struct {
-	ID           int64  `json:"id"`
-	StockID      int32  `json:"stock_id"`
-	Price        uint64 `json:"price"`
-	Quantity     uint64 `json:"quantity"`
-	MakerOrderID int64  `json:"maker_order_id"`
-	TakerOrderID int64  `json:"taker_order_id"`
+	ID           int64     `json:"id"`
+	StockID      int32     `json:"stock_id"`
+	Price        uint64    `json:"price"`
+	Quantity     uint64    `json:"quantity"`
+	MakerOrderID int64     `json:"maker_order_id"`
+	TakerOrderID int64     `json:"taker_order_id"`
+	MatchedAt    time.Time `json:"matched_at"`
 }
 
 func (q *Queries) SaveTrade(ctx context.Context, arg SaveTradeParams) error {
@@ -32,6 +34,7 @@ func (q *Queries) SaveTrade(ctx context.Context, arg SaveTradeParams) error {
 		arg.Quantity,
 		arg.MakerOrderID,
 		arg.TakerOrderID,
+		arg.MatchedAt,
 	)
 	return err
 }

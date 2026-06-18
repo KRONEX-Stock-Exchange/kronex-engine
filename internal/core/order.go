@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/bits"
+	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
@@ -285,6 +286,7 @@ func (e *Engine) match(order domain.Order) error {
 			Quantity:     filled,
 			MakerOrderId: counter.Id,
 			TakerOrderId: order.Id,
+			ExecutedAt:   time.Now().UTC(),
 		}})
 
 		// Maker 주문 상태 (전량 체결 FILLED / 일부 체결 후 잔류 OPEN)
@@ -367,6 +369,7 @@ func (e *Engine) match(order domain.Order) error {
 			events = append(events, outEvent{PatternHoldingUpdated, holding})
 		}
 	}
+
 	// Output WAL 작성
 	if err := e.appendOutput(events...); err != nil {
 		panic(fmt.Errorf("engine: append output wal: %w", err))
