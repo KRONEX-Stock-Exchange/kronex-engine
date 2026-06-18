@@ -51,6 +51,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateOrderStatusStmt, err = db.PrepareContext(ctx, updateOrderStatus); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateOrderStatus: %w", err)
 	}
+	if q.updateStockPriceStmt, err = db.PrepareContext(ctx, updateStockPrice); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateStockPrice: %w", err)
+	}
 	if q.updateStockStatusStmt, err = db.PrepareContext(ctx, updateStockStatus); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateStockStatus: %w", err)
 	}
@@ -105,6 +108,11 @@ func (q *Queries) Close() error {
 	if q.updateOrderStatusStmt != nil {
 		if cerr := q.updateOrderStatusStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateOrderStatusStmt: %w", cerr)
+		}
+	}
+	if q.updateStockPriceStmt != nil {
+		if cerr := q.updateStockPriceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateStockPriceStmt: %w", cerr)
 		}
 	}
 	if q.updateStockStatusStmt != nil {
@@ -165,6 +173,7 @@ type Queries struct {
 	saveTradeStmt            *sql.Stmt
 	updateAccountBalanceStmt *sql.Stmt
 	updateOrderStatusStmt    *sql.Stmt
+	updateStockPriceStmt     *sql.Stmt
 	updateStockStatusStmt    *sql.Stmt
 	upsertHoldingStmt        *sql.Stmt
 }
@@ -182,6 +191,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		saveTradeStmt:            q.saveTradeStmt,
 		updateAccountBalanceStmt: q.updateAccountBalanceStmt,
 		updateOrderStatusStmt:    q.updateOrderStatusStmt,
+		updateStockPriceStmt:     q.updateStockPriceStmt,
 		updateStockStatusStmt:    q.updateStockStatusStmt,
 		upsertHoldingStmt:        q.upsertHoldingStmt,
 	}

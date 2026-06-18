@@ -32,6 +32,7 @@ const (
 	PatternAccountActivated = "account.activated" // 계좌 활성화
 	PatternHoldingUpdated   = "holding.updated"   // 보유종목 변동
 	PatternStockListed      = "stock.listed"      // 종목 상장 완료
+	PatternStockUpdated     = "stock.updated"     // 종목 현재가 변동
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기

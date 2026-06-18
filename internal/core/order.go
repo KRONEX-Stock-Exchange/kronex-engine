@@ -344,6 +344,7 @@ func (e *Engine) match(order domain.Order) error {
 		if stock, ok := e.state.Stocks.Get(order.StockId); ok {
 			stock.Price = lastTradePrice
 			e.state.Stocks.Upsert(&stock)
+			events = append(events, outEvent{PatternStockUpdated, stock})
 		}
 	}
 
@@ -366,7 +367,6 @@ func (e *Engine) match(order domain.Order) error {
 			events = append(events, outEvent{PatternHoldingUpdated, holding})
 		}
 	}
-
 	// Output WAL 작성
 	if err := e.appendOutput(events...); err != nil {
 		panic(fmt.Errorf("engine: append output wal: %w", err))

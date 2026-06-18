@@ -18,6 +18,7 @@ type Querier interface {
 	SaveTrade(ctx context.Context, arg SaveTradeParams) error
 	UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) error
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
+	UpdateStockPrice(ctx context.Context, arg UpdateStockPriceParams) error
 	UpdateStockStatus(ctx context.Context, arg UpdateStockStatusParams) error
 	UpsertHolding(ctx context.Context, arg UpsertHoldingParams) error
 }
