@@ -62,8 +62,8 @@ func (t *TradingType) UnmarshalJSON(data []byte) error {
 type Order struct {
 	Id             int64       `json:"id,string"`
 	TargetId       int64       `json:"targetId,string"`
-	AccountId      int32       `json:"accountId"`
-	StockId        int32       `json:"stockId"`
+	AccountId      int32       `json:"accountId,string"`
+	StockId        int32       `json:"stockId,string"`
 	Price          uint64      `json:"price,string"`
 	Quantity       uint64      `json:"quantity,string"`
 	FilledQuantity uint64      `json:"filledQuantity,string"`
