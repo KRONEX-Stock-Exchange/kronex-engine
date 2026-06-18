@@ -17,7 +17,7 @@ func (e *Engine) handleAdmin(d Delivery) error {
 
 	switch env.Pattern {
 	// NOTE: 주식 상태 변경으로 통합 할 수도 있었지만, 추후 특정 시간 이후 상장 기능 구현을 위해 분리
-	case PatternStockListed:
+	case PatternStockList:
 		return e.handleStockListed(d, env.Data)
 	default:
 		log.Printf("engine: unknown admin pattern %q", env.Pattern)
@@ -39,7 +39,7 @@ func (e *Engine) handleStockListed(d Delivery, data json.RawMessage) error {
 	}
 
 	// 이미 처리한 상장이면 Ack 로 버림
-	if e.dedup.has(PatternStockListed, int64(stock.Id)) {
+	if e.dedup.has(PatternStockList, int64(stock.Id)) {
 		log.Printf("engine: duplicate stock id=%d, skip", stock.Id)
 		return d.Ack()
 	}
@@ -50,7 +50,7 @@ func (e *Engine) handleStockListed(d Delivery, data json.RawMessage) error {
 		panic(fmt.Errorf("engine: append input wal: %w", err))
 	}
 	e.inputSeq = idx
-	e.dedup.add(PatternStockListed, int64(stock.Id))
+	e.dedup.add(PatternStockList, int64(stock.Id))
 
 	e.setStockStatus(stock, domain.LISTED, PatternStockListed)
 	return d.Ack()

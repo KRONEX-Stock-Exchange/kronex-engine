@@ -19,8 +19,8 @@ const (
 	PatternOrderCreated   = "order.created"   // 주문
 	PatternAccountCreated = "account.created" // 계좌 등록
 
-	// Input WAL: 어드민 메세지 종류
-	PatternStockListed = "stock.listed" // 종목 상장
+	// Input WAL: 어드민 요청 종류
+	PatternStockList = "stock.list" // 종목 상장 요청
 
 	// Output WAL: 발행 이벤트 종류
 	PatternTradeExecuted    = "trade.executed"    // 체결 내역
@@ -31,6 +31,7 @@ const (
 	PatternAccountUpdated   = "account.updated"   // 계좌 잔고 변동
 	PatternAccountActivated = "account.activated" // 계좌 활성화
 	PatternHoldingUpdated   = "holding.updated"   // 보유종목 변동
+	PatternStockListed      = "stock.listed"      // 종목 상장 완료
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -149,7 +150,7 @@ func (e *Engine) loadDedup() error {
 				return fmt.Errorf("unmarshal account %d: %w", i, err)
 			}
 			e.dedup.add(env.Pattern, int64(acc.Id))
-		case PatternStockListed:
+		case PatternStockList:
 			var stock domain.Stock
 			if err := json.Unmarshal(env.Data, &stock); err != nil {
 				return fmt.Errorf("unmarshal stock %d: %w", i, err)
@@ -221,7 +222,7 @@ func (e *Engine) Replay(ctx context.Context) error {
 			}
 			e.inputSeq = i
 			e.activateAccount(acc)
-		case PatternStockListed:
+		case PatternStockList:
 			var stock domain.Stock
 			if err := json.Unmarshal(env.Data, &stock); err != nil {
 				return fmt.Errorf("unmarshal stock %d: %w", i, err)

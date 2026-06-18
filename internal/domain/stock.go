@@ -52,7 +52,7 @@ func (s *StockStatus) UnmarshalJSON(data []byte) error {
 }
 
 type Stock struct {
-	Id     int32       `json:"id"`
+	Id     int32       `json:"id,string"`
 	Price  uint64      `json:"price,string"`
 	Status StockStatus `json:"status"`
 }
