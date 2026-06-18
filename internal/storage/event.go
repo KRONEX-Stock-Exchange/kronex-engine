@@ -125,6 +125,17 @@ func (t *eventTx) ActivateAccount(ctx context.Context, accountID int32) error {
 	return nil
 }
 
+// 종목 현재가 갱신
+func (t *eventTx) UpdateStockPrice(ctx context.Context, stockID int32, price uint64) error {
+	if err := t.q.UpdateStockPrice(ctx, sqlc.UpdateStockPriceParams{
+		Price: price,
+		ID:    stockID,
+	}); err != nil {
+		return fmt.Errorf("update stock %d price: %w", stockID, err)
+	}
+	return nil
+}
+
 // 종목 상태 갱신 (상장/상폐/거래정지)
 func (t *eventTx) UpdateStockStatus(ctx context.Context, stockID int32, status string) error {
 	if err := t.q.UpdateStockStatus(ctx, sqlc.UpdateStockStatusParams{

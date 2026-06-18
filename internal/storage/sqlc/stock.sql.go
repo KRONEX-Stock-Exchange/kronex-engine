@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const updateStockPrice = `-- name: UpdateStockPrice :exec
+UPDATE stocks
+SET price = ?
+WHERE id = ?
+`
+
+type UpdateStockPriceParams struct {
+	Price uint64 `json:"price"`
+	ID    int32  `json:"id"`
+}
+
+func (q *Queries) UpdateStockPrice(ctx context.Context, arg UpdateStockPriceParams) error {
+	_, err := q.exec(ctx, q.updateStockPriceStmt, updateStockPrice, arg.Price, arg.ID)
+	return err
+}
+
 const updateStockStatus = `-- name: UpdateStockStatus :exec
 UPDATE stocks
 SET status = ?

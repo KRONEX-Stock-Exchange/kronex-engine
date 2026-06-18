@@ -28,6 +28,7 @@ type Tx interface {
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
 	ActivateAccount(ctx context.Context, accountID int32) error
 	UpdateStockStatus(ctx context.Context, stockID int32, status string) error
+	UpdateStockPrice(ctx context.Context, stockID int32, price uint64) error
 	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
 	Commit() error
 	Rollback() error
@@ -186,6 +187,14 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 			if err := tx.UpdateStockStatus(ctx, st.Id, st.Status.String()); err != nil {
 				return err
 			}
+		case core.PatternStockUpdated:
+			var st domain.Stock
+			if err := json.Unmarshal(ev.Data, &st); err != nil {
+				return fmt.Errorf("unmarshal stock: %w", err)
+			}
+			if err := tx.UpdateStockPrice(ctx, st.Id, st.Price); err != nil {
+				return err
+			}
 		default:
 			log.Printf("publisher: unknown pattern %q (skip)", ev.Pattern)
 		}
@@ -214,4 +223,3 @@ func orderStatus(pattern string) string {
 		return "OPEN"
 	}
 }
-
