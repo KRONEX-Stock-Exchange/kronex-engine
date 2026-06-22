@@ -73,6 +73,7 @@ func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) error {
 		Quantity:     tr.Quantity,
 		MakerOrderID: tr.MakerOrderId,
 		TakerOrderID: tr.TakerOrderId,
+		MatchedAt:    tr.ExecutedAt,
 	}); err != nil {
 		return fmt.Errorf("save trade %d: %w", tr.Id, err)
 	}

@@ -26,7 +26,7 @@ func OpenMySQL(ctx context.Context, cfg config.MySQL) (*sql.DB, error) {
 	dsnCfg.Net = "tcp"
 	dsnCfg.Addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	dsnCfg.DBName = cfg.Database
-	dsnCfg.Loc = time.Local
+	dsnCfg.Loc = time.UTC
 	dsnCfg.ParseTime = true
 	dsnCfg.AllowNativePasswords = true
 	dsn := dsnCfg.FormatDSN()
