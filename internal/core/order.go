@@ -342,11 +342,13 @@ func (e *Engine) match(order domain.Order) error {
 	}
 
 	// 종목 현재가를 마지막 체결가로 갱신
+	// NOTE: API Server와 락 순서 통일을 위해 DB 업데이트는 Account 업데이트 이후에 진행 (375L)
+	var updatedStock *domain.Stock
 	if lastTradePrice > 0 {
 		if stock, ok := e.state.Stocks.Get(order.StockId); ok {
 			stock.Price = lastTradePrice
 			e.state.Stocks.Upsert(&stock)
-			events = append(events, outEvent{PatternStockUpdated, stock})
+			updatedStock = &stock
 		}
 	}
 
@@ -368,6 +370,10 @@ func (e *Engine) match(order domain.Order) error {
 		if holding, ok := e.state.StockBalances.Get(id, order.StockId); ok {
 			events = append(events, outEvent{PatternHoldingUpdated, holding})
 		}
+	}
+
+	if updatedStock != nil {
+		events = append(events, outEvent{PatternStockUpdated, *updatedStock})
 	}
 
 	// Output WAL 작성
