@@ -20,8 +20,9 @@ const (
 	PatternAccountCreated = "account.created" // 계좌 등록
 
 	// Input WAL: 어드민 요청 종류
-	PatternStockList          = "stock.list"           // 종목 상장 요청
-	PatternAdminBalanceAdjust = "admin.balance.adjust" // 잔액 증감 요청
+	PatternStockList               = "stock.list"                 // 종목 상장 요청
+	PatternAdminBalanceAdjust      = "admin.balance.adjust"       // 잔액 증감 요청
+	PatternAdminStockBalanceAdjust = "admin.stock_balance.adjust" // 보유 주식 잔고 증감 요청
 
 	// Output WAL: 발행 이벤트 종류
 	PatternTradeExecuted    = "trade.executed"    // 체결 내역
@@ -158,6 +159,18 @@ func (e *Engine) loadDedup() error {
 				return fmt.Errorf("unmarshal stock %d: %w", i, err)
 			}
 			e.dedup.add(env.Pattern, int64(stock.Id))
+		case PatternAdminBalanceAdjust:
+			var req domain.BalanceAdjust
+			if err := json.Unmarshal(env.Data, &req); err != nil {
+				return fmt.Errorf("unmarshal balance adjust %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, req.Id)
+		case PatternAdminStockBalanceAdjust:
+			var req domain.StockBalanceAdjust
+			if err := json.Unmarshal(env.Data, &req); err != nil {
+				return fmt.Errorf("unmarshal stock balance adjust %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, req.Id)
 		}
 	}
 	return nil
@@ -231,6 +244,24 @@ func (e *Engine) Replay(ctx context.Context) error {
 			}
 			e.inputSeq = i
 			e.setStockStatus(stock, domain.LISTED, PatternStockListed)
+		case PatternAdminBalanceAdjust:
+			var req domain.BalanceAdjust
+			if err := json.Unmarshal(env.Data, &req); err != nil {
+				return fmt.Errorf("unmarshal balance adjust %d: %w", i, err)
+			}
+			e.inputSeq = i
+			if _, err := e.applyBalanceAdjust(req); err != nil {
+				return fmt.Errorf("replay balance adjust %d: %w", i, err)
+			}
+		case PatternAdminStockBalanceAdjust:
+			var req domain.StockBalanceAdjust
+			if err := json.Unmarshal(env.Data, &req); err != nil {
+				return fmt.Errorf("unmarshal stock balance adjust %d: %w", i, err)
+			}
+			e.inputSeq = i
+			if _, err := e.applyStockBalanceAdjust(req); err != nil {
+				return fmt.Errorf("replay stock balance adjust %d: %w", i, err)
+			}
 		}
 	}
 
