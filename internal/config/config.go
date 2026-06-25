@@ -35,6 +35,8 @@ type Config struct {
 	WAL      WAL
 }
 
+const rabbitMQPrefetchCount = 256
+
 func Load() (Config, error) {
 	mysqlPort, err := envInt("MYSQL_PORT", 3306)
 	if err != nil {
@@ -42,11 +44,6 @@ func Load() (Config, error) {
 	}
 
 	rabbitPort, err := envInt("RABBITMQ_PORT", 5672)
-	if err != nil {
-		return Config{}, err
-	}
-
-	prefetch, err := envInt("RABBITMQ_PREFETCH_COUNT", 256)
 	if err != nil {
 		return Config{}, err
 	}
@@ -64,10 +61,10 @@ func Load() (Config, error) {
 			Port:          rabbitPort,
 			User:          env("RABBITMQ_USER", "guest"),
 			Password:      env("RABBITMQ_PASSWORD", "guest"),
-			PrefetchCount: prefetch,
-			DataQueue:     env("RABBITMQ_DATA_QUEUE", "data_queue"),
-			AdminQueue:    env("RABBITMQ_ADMIN_QUEUE", "admin_queue"),
-			EventQueue:    env("RABBITMQ_EVENT_QUEUE", "event_queue"),
+			PrefetchCount: rabbitMQPrefetchCount,
+			DataQueue:     "data_queue",
+			AdminQueue:    "admin_queue",
+			EventQueue:    "event_queue",
 		},
 		WAL: WAL{
 			Dir: env("WAL_DIR", "./data/wal"),

@@ -36,9 +36,11 @@ CREATE TABLE `accounts` (
   `balance`           BIGINT UNSIGNED NOT NULL,
   `available_balance` BIGINT UNSIGNED NOT NULL,
   `status`            ENUM('PENDING', 'ACTIVE') NOT NULL DEFAULT 'PENDING',
+  `published_at`      DATETIME(3)     NULL,
   `created_at`        DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_accounts_account_number` (`account_number`),
+  KEY `idx_accounts_published_at` (`published_at`),
   KEY `idx_accounts_user_id` (`user_id`),
   CONSTRAINT `fk_accounts_user`
     FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
@@ -48,30 +50,34 @@ CREATE TABLE `accounts` (
 -- stocks (주식 정보)
 -- =========================================================
 CREATE TABLE `stocks` (
-  `id`         INT             NOT NULL AUTO_INCREMENT,
-  `name`       VARCHAR(30)     NOT NULL,
-  `price`      BIGINT UNSIGNED NOT NULL,
-  `status`     ENUM('PENDING', 'LISTED', 'SUSPENDED', 'DELISTED') NOT NULL DEFAULT 'PENDING',
-  `created_at` DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  `updated_at` DATETIME(3)     NULL ON UPDATE CURRENT_TIMESTAMP(3),
+  `id`            INT             NOT NULL AUTO_INCREMENT,
+  `name`          VARCHAR(30)     NOT NULL,
+  `price`         BIGINT UNSIGNED NOT NULL,
+  `listing_price` BIGINT UNSIGNED NOT NULL,
+  `status`        ENUM('PENDING', 'LISTED', 'SUSPENDED', 'DELISTED') NOT NULL DEFAULT 'PENDING',
+  `published_at`  DATETIME(3)     NULL,
+  `created_at`    DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at`    DATETIME(3)     NULL ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_stocks_name` (`name`)
+  UNIQUE KEY `uk_stocks_name` (`name`),
+  KEY `idx_stocks_published_at` (`published_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- =========================================================
--- stock_histories (주식 일별 히스토리)
+-- candles (차트 봉 데이터)
 -- =========================================================
-CREATE TABLE `stock_histories` (
+CREATE TABLE `candles` (
   `stock_id`    INT             NOT NULL,
-  `date`        DATE            NOT NULL,
+  `candle_time` DATETIME(3)     NOT NULL,
+  `type`        ENUM('1m', '5m', '15m', '30m', '1h', '1d') NOT NULL,
+  `open`        BIGINT UNSIGNED NOT NULL,
   `high`        BIGINT UNSIGNED NOT NULL,
   `low`         BIGINT UNSIGNED NOT NULL,
   `close`       BIGINT UNSIGNED NOT NULL,
-  `open`        BIGINT UNSIGNED NULL,
-  `upper_limit` BIGINT UNSIGNED NOT NULL,
-  `lower_limit` BIGINT UNSIGNED NOT NULL,
-  PRIMARY KEY (`stock_id`, `date`),
-  CONSTRAINT `fk_stock_histories_stock`
+  `volume`      BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (`stock_id`, `candle_time`, `type`),
+  KEY `idx_candles_stock_type_time` (`stock_id`, `type`, `candle_time`),
+  CONSTRAINT `fk_candles_stock`
     FOREIGN KEY (`stock_id`) REFERENCES `stocks` (`id`) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
@@ -115,6 +121,9 @@ CREATE TABLE `orders` (
   KEY `idx_orders_account_id` (`account_id`),
   KEY `idx_orders_stock_id` (`stock_id`),
   KEY `idx_orders_target_id` (`target_id`),
+  KEY `idx_orders_stock_status_side_price` (`stock_id`, `status`, `trading_type`, `price`),
+  KEY `idx_orders_account_status_created` (`account_id`, `status`, `created_at`),
+  KEY `idx_orders_account_created` (`account_id`, `created_at`),
   CONSTRAINT `fk_orders_account`
     FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`),
   CONSTRAINT `fk_orders_stock`
@@ -137,6 +146,7 @@ CREATE TABLE `trades` (
   `matched_at`     DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   KEY `idx_trades_stock_id` (`stock_id`),
+  KEY `idx_trades_stock_matched_at` (`stock_id`, `matched_at`),
   KEY `idx_trades_maker_order_id` (`maker_order_id`),
   KEY `idx_trades_taker_order_id` (`taker_order_id`),
   CONSTRAINT `fk_trades_stock`

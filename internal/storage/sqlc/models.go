@@ -53,6 +53,52 @@ func (ns NullAccountsStatus) Value() (driver.Value, error) {
 	return string(ns.AccountsStatus), nil
 }
 
+type CandlesType string
+
+const (
+	CandlesType1m  CandlesType = "1m"
+	CandlesType5m  CandlesType = "5m"
+	CandlesType15m CandlesType = "15m"
+	CandlesType30m CandlesType = "30m"
+	CandlesType1h  CandlesType = "1h"
+	CandlesType1d  CandlesType = "1d"
+)
+
+func (e *CandlesType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CandlesType(s)
+	case string:
+		*e = CandlesType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CandlesType: %T", src)
+	}
+	return nil
+}
+
+type NullCandlesType struct {
+	CandlesType CandlesType `json:"candles_type"`
+	Valid       bool        `json:"valid"` // Valid is true if CandlesType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCandlesType) Scan(value interface{}) error {
+	if value == nil {
+		ns.CandlesType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CandlesType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCandlesType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CandlesType), nil
+}
+
 type CursorsType string
 
 const (
@@ -365,7 +411,19 @@ type Account struct {
 	Balance          uint64         `json:"balance"`
 	AvailableBalance uint64         `json:"available_balance"`
 	Status           AccountsStatus `json:"status"`
+	PublishedAt      sql.NullTime   `json:"published_at"`
 	CreatedAt        time.Time      `json:"created_at"`
+}
+
+type Candle struct {
+	StockID    int32       `json:"stock_id"`
+	CandleTime time.Time   `json:"candle_time"`
+	Type       CandlesType `json:"type"`
+	Open       uint64      `json:"open"`
+	High       uint64      `json:"high"`
+	Low        uint64      `json:"low"`
+	Close      uint64      `json:"close"`
+	Volume     uint64      `json:"volume"`
 }
 
 type Cursor struct {
@@ -403,23 +461,14 @@ type Snapshot struct {
 }
 
 type Stock struct {
-	ID        int32        `json:"id"`
-	Name      string       `json:"name"`
-	Price     uint64       `json:"price"`
-	Status    StocksStatus `json:"status"`
-	CreatedAt time.Time    `json:"created_at"`
-	UpdatedAt sql.NullTime `json:"updated_at"`
-}
-
-type StockHistory struct {
-	StockID    int32         `json:"stock_id"`
-	Date       time.Time     `json:"date"`
-	High       uint64        `json:"high"`
-	Low        uint64        `json:"low"`
-	Close      uint64        `json:"close"`
-	Open       sql.NullInt64 `json:"open"`
-	UpperLimit uint64        `json:"upper_limit"`
-	LowerLimit uint64        `json:"lower_limit"`
+	ID           int32        `json:"id"`
+	Name         string       `json:"name"`
+	Price        uint64       `json:"price"`
+	ListingPrice uint64       `json:"listing_price"`
+	Status       StocksStatus `json:"status"`
+	PublishedAt  sql.NullTime `json:"published_at"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    sql.NullTime `json:"updated_at"`
 }
 
 type Trade struct {
