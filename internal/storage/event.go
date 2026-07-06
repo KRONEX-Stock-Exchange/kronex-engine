@@ -16,8 +16,6 @@ var (
 	_ publisher.Tx    = (*eventTx)(nil)
 )
 
-const publisherCursorType = sqlc.CursorsTypeEVENT
-
 type EventStore struct {
 	db *sql.DB
 	q  *sqlc.Queries
@@ -36,25 +34,22 @@ func (s *EventStore) Begin(ctx context.Context) (publisher.Tx, error) {
 	return &eventTx{tx: tx, q: s.q.WithTx(tx)}, nil
 }
 
-// 퍼블리셔 커서 로드. 행이 없으면(최초 부팅) 0 반환.
-func (s *EventStore) LoadCursor(ctx context.Context) (uint64, error) {
-	idx, err := s.q.LoadCursor(ctx, publisherCursorType)
+// MQ 발행 커서 로드. 행이 없으면(최초 부팅) 0 반환.
+func (s *EventStore) LoadMQPublishedCursor(ctx context.Context) (uint64, error) {
+	idx, err := s.q.LoadMQPublishedCursor(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
 	if err != nil {
-		return 0, fmt.Errorf("load cursor: %w", err)
+		return 0, fmt.Errorf("load MQ published cursor: %w", err)
 	}
 	return uint64(idx), nil
 }
 
-// 퍼블리셔 커서 저장 (upsert)
-func (s *EventStore) SaveCursor(ctx context.Context, index uint64) error {
-	if err := s.q.SaveCursor(ctx, sqlc.SaveCursorParams{
-		Type:  publisherCursorType,
-		Index: int64(index),
-	}); err != nil {
-		return fmt.Errorf("save cursor %d: %w", index, err)
+// MQ 발행 커서 저장 (upsert)
+func (s *EventStore) SaveMQPublishedCursor(ctx context.Context, index uint64) error {
+	if err := s.q.SaveMQPublishedCursor(ctx, int64(index)); err != nil {
+		return fmt.Errorf("save MQ published cursor %d: %w", index, err)
 	}
 	return nil
 }
@@ -64,20 +59,29 @@ type eventTx struct {
 	q  *sqlc.Queries
 }
 
+// DB 변경과 같은 트랜잭션에서 마지막으로 반영한 Output WAL 인덱스를 저장한다.
+func (t *eventTx) SaveDBAppliedCursor(ctx context.Context, index uint64) error {
+	if err := t.q.SaveDBAppliedCursor(ctx, int64(index)); err != nil {
+		return fmt.Errorf("save DB applied cursor %d: %w", index, err)
+	}
+	return nil
+}
+
 // 체결 내역 저장
-func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) error {
-	if err := t.q.SaveTrade(ctx, sqlc.SaveTradeParams{
-		ID:           tr.Id,
+func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) (int64, error) {
+	id, err := t.q.SaveTrade(ctx, sqlc.SaveTradeParams{
 		StockID:      tr.StockId,
 		Price:        tr.Price,
 		Quantity:     tr.Quantity,
 		MakerOrderID: tr.MakerOrderId,
 		TakerOrderID: tr.TakerOrderId,
 		MatchedAt:    tr.ExecutedAt,
-	}); err != nil {
-		return fmt.Errorf("save trade %d: %w", tr.Id, err)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("save trade: %w", err)
 	}
-	return nil
+
+	return id, nil
 }
 
 // 주문 상태/체결수량 갱신

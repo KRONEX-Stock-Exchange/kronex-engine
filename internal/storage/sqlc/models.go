@@ -102,7 +102,8 @@ func (ns NullCandlesType) Value() (driver.Value, error) {
 type CursorsType string
 
 const (
-	CursorsTypeEVENT CursorsType = "EVENT"
+	CursorsTypeDBAPPLIEDOUTPUTSEQ   CursorsType = "DB_APPLIED_OUTPUT_SEQ"
+	CursorsTypeMQPUBLISHEDOUTPUTSEQ CursorsType = "MQ_PUBLISHED_OUTPUT_SEQ"
 )
 
 func (e *CursorsType) Scan(src interface{}) error {

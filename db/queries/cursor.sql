@@ -1,7 +1,14 @@
--- name: LoadCursor :one
-SELECT `index` FROM `cursors` WHERE `type` = ?;
+-- name: LoadMQPublishedCursor :one
+SELECT `index`
+FROM `cursors`
+WHERE `type` = 'MQ_PUBLISHED_OUTPUT_SEQ';
 
--- name: SaveCursor :exec
+-- name: SaveMQPublishedCursor :exec
 INSERT INTO `cursors` (`type`, `index`)
-VALUES (?, ?)
+VALUES ('MQ_PUBLISHED_OUTPUT_SEQ', ?)
+ON DUPLICATE KEY UPDATE `index` = VALUES(`index`);
+
+-- name: SaveDBAppliedCursor :exec
+INSERT INTO `cursors` (`type`, `index`)
+VALUES ('DB_APPLIED_OUTPUT_SEQ', ?)
 ON DUPLICATE KEY UPDATE `index` = VALUES(`index`);

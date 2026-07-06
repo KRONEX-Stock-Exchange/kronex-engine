@@ -17,12 +17,12 @@ const backstopInterval = 1 * time.Second
 
 type Store interface {
 	Begin(ctx context.Context) (Tx, error)
-	LoadCursor(ctx context.Context) (uint64, error)
-	SaveCursor(ctx context.Context, index uint64) error
+	LoadMQPublishedCursor(ctx context.Context) (uint64, error)
+	SaveMQPublishedCursor(ctx context.Context, index uint64) error
 }
 
 type Tx interface {
-	SaveTrade(ctx context.Context, trade domain.Trade) error
+	SaveTrade(ctx context.Context, trade domain.Trade) (int64, error)
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
 	RejectOrder(ctx context.Context, orderID int64, reason string) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
@@ -30,6 +30,7 @@ type Tx interface {
 	UpdateStockStatus(ctx context.Context, stockID int32, status string) error
 	UpdateStockPrice(ctx context.Context, stockID int32, price uint64) error
 	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
+	SaveDBAppliedCursor(ctx context.Context, index uint64) error
 	Commit() error
 	Rollback() error
 }
@@ -55,9 +56,11 @@ func New(output *wal.WAL, signal <-chan struct{}, db Store, mq core.Publisher, e
 
 func (p *Publisher) Run(ctx context.Context) error {
 	// 영속화된 커서 로드 (재시작 시 어디까지 발행했는지 복원)
-	cursor, err := p.db.LoadCursor(ctx)
+	// TODO: 기존의 Cursor가 DB, MQ Cursor로 두가지로 나눠졌기때문에 DB 업데이트 성공 MQ 발행 실패와 같은
+	// 상황에서 DB 업데이트를 건너뛰는 로직이 필요함
+	cursor, err := p.db.LoadMQPublishedCursor(ctx)
 	if err != nil {
-		return fmt.Errorf("load cursor: %w", err)
+		return fmt.Errorf("load MQ published cursor: %w", err)
 	}
 	p.cursor = cursor
 
@@ -93,51 +96,63 @@ func (p *Publisher) drain(ctx context.Context) error {
 			return fmt.Errorf("read output %d: %w", next, err)
 		}
 
-		// DB 저장 및 이벤트 전송
-		if err := p.handleRecord(ctx, data); err != nil {
+		// DB 저장
+		env, err := p.handleRecord(ctx, next, data)
+		if err != nil {
 			return fmt.Errorf("handle output %d: %w", next, err)
 		}
 
-		// 커서 저장
-		if err := p.db.SaveCursor(ctx, next); err != nil {
-			return fmt.Errorf("save cursor %d: %w", next, err)
+		// 이벤트 전송 후 MQ 발행 커서 저장
+		if err := p.publish(ctx, env); err != nil {
+			return fmt.Errorf("publish output %d: %w", next, err)
 		}
+		if err := p.db.SaveMQPublishedCursor(ctx, next); err != nil {
+			return fmt.Errorf("save MQ published cursor %d: %w", next, err)
+		}
+
 		p.cursor = next
 	}
 	return nil
 }
 
-func (p *Publisher) handleRecord(ctx context.Context, raw []byte) error {
+func (p *Publisher) handleRecord(ctx context.Context, index uint64, raw []byte) (core.OutputEnvelope, error) {
 	var env core.OutputEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return fmt.Errorf("unmarshal output envelope: %w", err)
+		return core.OutputEnvelope{}, fmt.Errorf("unmarshal output envelope: %w", err)
 	}
 
 	// DB 저장
-	if err := p.applyToDB(ctx, env.Events); err != nil {
-		return err
+	if err := p.applyToDB(ctx, index, env.Events); err != nil {
+		return core.OutputEnvelope{}, err
 	}
 
-	// 이벤트 전송
-	return p.publish(ctx, raw)
+	return env, nil
 }
 
-func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) error {
+func (p *Publisher) applyToDB(ctx context.Context, index uint64, events []core.OutputEvent) error {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	for _, ev := range events {
+	for i := range events {
+		ev := &events[i]
+
 		switch ev.Pattern {
 		case core.PatternTradeExecuted:
 			var tr domain.Trade
 			if err := json.Unmarshal(ev.Data, &tr); err != nil {
 				return fmt.Errorf("unmarshal trade: %w", err)
 			}
-			if err := tx.SaveTrade(ctx, tr); err != nil {
+			id, err := tx.SaveTrade(ctx, tr)
+			if err != nil {
 				return err
+			}
+			tr.Id = id
+			ev.Data, err = json.Marshal(tr)
+			if err != nil {
+				return fmt.Errorf("marshal saved trade: %w", err)
 			}
 		case core.PatternOrderOpen, core.PatternOrderFilled, core.PatternOrderCanceled:
 			var oe domain.OrderEvent
@@ -200,16 +215,25 @@ func (p *Publisher) applyToDB(ctx context.Context, events []core.OutputEvent) er
 		}
 	}
 
+	if err := tx.SaveDBAppliedCursor(ctx, index); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
 	return nil
 }
 
-func (p *Publisher) publish(ctx context.Context, raw []byte) error {
+func (p *Publisher) publish(ctx context.Context, env core.OutputEnvelope) error {
+	payload, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("marshal output envelope: %w", err)
+	}
+
 	return p.mq.Publish(ctx, domain.Message{
 		RoutingKey: p.eventQueue,
-		Payload:    raw,
+		Payload:    payload,
 	})
 }
 

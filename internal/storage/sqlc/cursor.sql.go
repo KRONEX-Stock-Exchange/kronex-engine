@@ -9,29 +9,37 @@ import (
 	"context"
 )
 
-const loadCursor = `-- name: LoadCursor :one
-SELECT ` + "`" + `index` + "`" + ` FROM ` + "`" + `cursors` + "`" + ` WHERE ` + "`" + `type` + "`" + ` = ?
+const loadMQPublishedCursor = `-- name: LoadMQPublishedCursor :one
+SELECT ` + "`" + `index` + "`" + `
+FROM ` + "`" + `cursors` + "`" + `
+WHERE ` + "`" + `type` + "`" + ` = 'MQ_PUBLISHED_OUTPUT_SEQ'
 `
 
-func (q *Queries) LoadCursor(ctx context.Context, type_ CursorsType) (int64, error) {
-	row := q.queryRow(ctx, q.loadCursorStmt, loadCursor, type_)
+func (q *Queries) LoadMQPublishedCursor(ctx context.Context) (int64, error) {
+	row := q.queryRow(ctx, q.loadMQPublishedCursorStmt, loadMQPublishedCursor)
 	var index int64
 	err := row.Scan(&index)
 	return index, err
 }
 
-const saveCursor = `-- name: SaveCursor :exec
+const saveDBAppliedCursor = `-- name: SaveDBAppliedCursor :exec
 INSERT INTO ` + "`" + `cursors` + "`" + ` (` + "`" + `type` + "`" + `, ` + "`" + `index` + "`" + `)
-VALUES (?, ?)
+VALUES ('DB_APPLIED_OUTPUT_SEQ', ?)
 ON DUPLICATE KEY UPDATE ` + "`" + `index` + "`" + ` = VALUES(` + "`" + `index` + "`" + `)
 `
 
-type SaveCursorParams struct {
-	Type  CursorsType `json:"type"`
-	Index int64       `json:"index"`
+func (q *Queries) SaveDBAppliedCursor(ctx context.Context, index int64) error {
+	_, err := q.exec(ctx, q.saveDBAppliedCursorStmt, saveDBAppliedCursor, index)
+	return err
 }
 
-func (q *Queries) SaveCursor(ctx context.Context, arg SaveCursorParams) error {
-	_, err := q.exec(ctx, q.saveCursorStmt, saveCursor, arg.Type, arg.Index)
+const saveMQPublishedCursor = `-- name: SaveMQPublishedCursor :exec
+INSERT INTO ` + "`" + `cursors` + "`" + ` (` + "`" + `type` + "`" + `, ` + "`" + `index` + "`" + `)
+VALUES ('MQ_PUBLISHED_OUTPUT_SEQ', ?)
+ON DUPLICATE KEY UPDATE ` + "`" + `index` + "`" + ` = VALUES(` + "`" + `index` + "`" + `)
+`
+
+func (q *Queries) SaveMQPublishedCursor(ctx context.Context, index int64) error {
+	_, err := q.exec(ctx, q.saveMQPublishedCursorStmt, saveMQPublishedCursor, index)
 	return err
 }
