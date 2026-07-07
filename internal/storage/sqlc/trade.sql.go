@@ -10,14 +10,12 @@ import (
 	"time"
 )
 
-const saveTrade = `-- name: SaveTrade :exec
-INSERT INTO trades (id, stock_id, price, quantity, maker_order_id, taker_order_id, matched_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE id = id
+const saveTrade = `-- name: SaveTrade :execlastid
+INSERT INTO trades (stock_id, price, quantity, maker_order_id, taker_order_id, matched_at)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type SaveTradeParams struct {
-	ID           int64     `json:"id"`
 	StockID      int32     `json:"stock_id"`
 	Price        uint64    `json:"price"`
 	Quantity     uint64    `json:"quantity"`
@@ -26,9 +24,8 @@ type SaveTradeParams struct {
 	MatchedAt    time.Time `json:"matched_at"`
 }
 
-func (q *Queries) SaveTrade(ctx context.Context, arg SaveTradeParams) error {
-	_, err := q.exec(ctx, q.saveTradeStmt, saveTrade,
-		arg.ID,
+func (q *Queries) SaveTrade(ctx context.Context, arg SaveTradeParams) (int64, error) {
+	result, err := q.exec(ctx, q.saveTradeStmt, saveTrade,
 		arg.StockID,
 		arg.Price,
 		arg.Quantity,
@@ -36,5 +33,8 @@ func (q *Queries) SaveTrade(ctx context.Context, arg SaveTradeParams) error {
 		arg.TakerOrderID,
 		arg.MatchedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }

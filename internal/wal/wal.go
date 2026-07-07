@@ -26,6 +26,14 @@ func Open(path string, opts *Options) (*WAL, error) {
 }
 
 func (w *WAL) Append(data []byte) (uint64, error) {
+	return w.AppendWithIndex(func(uint64) ([]byte, error) {
+		return data, nil
+	})
+}
+
+// AppendWithIndex는 새 레코드의 인덱스를 builder에 전달해 만든 데이터를 기록한다.
+// 인덱스 산정과 데이터 기록은 같은 락 안에서 수행된다.
+func (w *WAL) AppendWithIndex(builder func(index uint64) ([]byte, error)) (uint64, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -35,6 +43,10 @@ func (w *WAL) Append(data []byte) (uint64, error) {
 	}
 
 	index := last + 1
+	data, err := builder(index)
+	if err != nil {
+		return 0, fmt.Errorf("build wal index %d: %w", index, err)
+	}
 	if err := w.log.Write(index, data); err != nil {
 		return 0, fmt.Errorf("write wal index %d: %w", index, err)
 	}

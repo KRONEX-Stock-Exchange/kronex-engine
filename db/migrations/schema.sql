@@ -172,7 +172,7 @@ CREATE TABLE `snapshots` (
 -- Cursor (커서)
 -- =========================================================
 CREATE TABLE `cursors` (
-  `type`  ENUM('EVENT') NOT NULL,
+  `type`  ENUM('DB_APPLIED_OUTPUT_SEQ', 'MQ_PUBLISHED_OUTPUT_SEQ') NOT NULL,
   `index` BIGINT        NOT NULL,
   PRIMARY KEY (`type`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
