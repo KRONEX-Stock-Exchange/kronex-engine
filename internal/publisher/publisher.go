@@ -210,6 +210,8 @@ func (p *Publisher) applyToDB(ctx context.Context, index uint64, events []core.O
 			if err := tx.UpdateStockPrice(ctx, st.Id, st.Price); err != nil {
 				return err
 			}
+		case core.PatternOrderBookUpdated:
+			// 호가 이벤트는 인메모리 원장의 결과를 MQ로만 전달
 		default:
 			log.Printf("publisher: unknown pattern %q (skip)", ev.Pattern)
 		}

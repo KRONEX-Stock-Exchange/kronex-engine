@@ -105,6 +105,21 @@ func (b *OrderBook) Get(orderId int64) (order domain.Order, ok bool) {
 	return *ref.elem.Value.(*domain.Order), true
 }
 
+// LevelQuantity는 특정 매수/매도 가격대에 남은 주문 수량의 합을 반환한다.
+// 가격대가 없으면 0을 반환한다.
+func (b *OrderBook) LevelQuantity(side domain.TradingType, price uint64) uint64 {
+	queues := b.buy
+	if side == domain.TRADING_SELL {
+		queues = b.sell
+	}
+
+	queue, ok := queues[price]
+	if !ok {
+		return 0
+	}
+	return levelQuantity(queue)
+}
+
 // 노드를 호가창에서 제거하고 index/가격 슬라이스를 동기화
 // 빈 가격대는 가격 슬라이스에서도 함께 정리
 func (b *OrderBook) removeRef(orderId int64, ref *orderRef) {

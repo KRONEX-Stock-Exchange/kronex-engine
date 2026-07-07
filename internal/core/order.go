@@ -162,6 +162,22 @@ func orderStatusPattern(order domain.Order) string {
 func (e *Engine) match(order domain.Order) error {
 	ob := e.state.OrderBooks.Get(order.StockId)
 
+	// 영향 받은 호가창 기록
+	type affectedLevel struct {
+		side  domain.TradingType
+		price uint64
+	}
+	var affectedLevels []affectedLevel
+	seenLevel := make(map[affectedLevel]struct{})
+	trackLevel := func(side domain.TradingType, price uint64) {
+		level := affectedLevel{side: side, price: price}
+		if _, ok := seenLevel[level]; ok {
+			return
+		}
+		seenLevel[level] = struct{}{}
+		affectedLevels = append(affectedLevels, level)
+	}
+
 	// 가용 잔고 및 수량 차감
 	switch order.TradingType {
 	case domain.TRADING_BUY:
@@ -237,6 +253,7 @@ func (e *Engine) match(order domain.Order) error {
 			break
 		}
 		order.FilledQuantity += filled
+		trackLevel(counterSide, bestPrice)
 
 		// 원장 상태 업데이트
 		cash := bestPrice * filled
@@ -311,6 +328,7 @@ func (e *Engine) match(order domain.Order) error {
 	// 지정가 미체결분 호가창 등록
 	if order.FilledQuantity < order.Quantity && order.OrderType == domain.ORDER_LIMIT {
 		ob.Add(order)
+		trackLevel(order.TradingType, order.Price)
 	}
 
 	// 시장가 미체결분 취소 및 가용 잔고 복구
@@ -362,6 +380,22 @@ func (e *Engine) match(order domain.Order) error {
 		FilledQuantity: order.FilledQuantity,
 	}})
 
+	// 영향 받은 호가 최종 상태
+	if len(affectedLevels) > 0 {
+		levels := make([]domain.OrderBookLevel, 0, len(affectedLevels))
+		for _, level := range affectedLevels {
+			levels = append(levels, domain.OrderBookLevel{
+				Side:     orderBookSide(level.side),
+				Price:    level.price,
+				Quantity: ob.LevelQuantity(level.side, level.price),
+			})
+		}
+		events = append(events, outEvent{PatternOrderBookUpdated, domain.OrderBookUpdated{
+			StockId: order.StockId,
+			Levels:  levels,
+		}})
+	}
+
 	// 잔고 변동 계좌 + 보유종목 최종 상태
 	for _, id := range accountIDs {
 		if acc, ok := e.state.Accounts.Get(id); ok {
@@ -382,6 +416,13 @@ func (e *Engine) match(order domain.Order) error {
 	}
 
 	return nil
+}
+
+func orderBookSide(side domain.TradingType) string {
+	if side == domain.TRADING_SELL {
+		return "SELL"
+	}
+	return "BUY"
 }
 
 // TODO: 주문 정정 로직 연결

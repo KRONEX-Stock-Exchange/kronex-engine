@@ -35,6 +35,7 @@ const (
 	PatternHoldingUpdated   = "holding.updated"   // 보유종목 변동
 	PatternStockListed      = "stock.listed"      // 종목 상장 완료
 	PatternStockUpdated     = "stock.updated"     // 종목 현재가 변동
+	PatternOrderBookUpdated = "orderbook.updated" // 영향받은 호가 가격대의 최종 잔량
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -391,8 +392,9 @@ type OutputEvent struct {
 
 // 한 입력 주문이 만든 이벤트(체결들 + 상태)를 한 레코드로 묶은 Output WAL 봉투
 type OutputEnvelope struct {
-	InputSeq uint64        `json:"inputSeq"` // 이 출력을 만든 입력 WAL 인덱스
-	Events   []OutputEvent `json:"events"`
+	InputSeq  uint64        `json:"inputSeq"`  // 이 출력을 만든 Input WAL 인덱스
+	OutputSeq uint64        `json:"outputSeq"` // 이 봉투가 기록된 Output WAL 인덱스
+	Events    []OutputEvent `json:"events"`
 }
 
 type outEvent struct {
@@ -419,11 +421,13 @@ func (e *Engine) appendOutput(events ...outEvent) error {
 		}
 		out = append(out, OutputEvent{Pattern: ev.pattern, Data: raw})
 	}
-	payload, err := json.Marshal(OutputEnvelope{InputSeq: e.inputSeq, Events: out})
-	if err != nil {
-		return fmt.Errorf("marshal output envelope: %w", err)
-	}
-	if _, err := e.output.Append(payload); err != nil {
+	if _, err := e.output.AppendWithIndex(func(outputSeq uint64) ([]byte, error) {
+		return json.Marshal(OutputEnvelope{
+			InputSeq:  e.inputSeq,
+			OutputSeq: outputSeq,
+			Events:    out,
+		})
+	}); err != nil {
 		return fmt.Errorf("append output wal: %w", err)
 	}
 

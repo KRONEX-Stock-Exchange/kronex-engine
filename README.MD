@@ -89,7 +89,7 @@ RabbitMQ request
 | Event Publisher | Output WAL을 순서대로 읽어 DB에 반영하고 이벤트 큐에 이벤트를 발행합니다. |
 | Snapshot Saver  | 5분 주기로 생성된 엔진 스냅샷을 DB에 저장합니다.                          |
 
-Output WAL의 각 레코드는 하나의 입력 요청에서 생성된 체결, 주문 상태, 잔고 변경 이벤트를 `OutputEnvelope`로 묶습니다.
+Output WAL의 각 레코드는 하나의 입력 요청에서 생성된 체결, 주문 상태, 잔고 변경 이벤트를 `OutputEnvelope`로 묶습니다. 봉투에는 원본 Input WAL 인덱스인 `inputSeq`와 해당 Output WAL 인덱스인 `outputSeq`가 함께 기록됩니다.
 
 ### Main Engine
 
