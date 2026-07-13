@@ -20,6 +20,10 @@ type SnapshotStore interface {
 	LatestSnapshot(ctx context.Context) (state []byte, inputWalIndex uint64, found bool, err error)
 }
 
+type TradeIDStore interface {
+	LastTradeID(ctx context.Context) (int64, error)
+}
+
 type Delivery struct {
 	Queue   string // 수신 큐 (data/admin 플레인 구분)
 	Message domain.Message

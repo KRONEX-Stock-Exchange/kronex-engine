@@ -9,6 +9,19 @@ import (
 	"context"
 )
 
+const loadDBAppliedCursor = `-- name: LoadDBAppliedCursor :one
+SELECT ` + "`" + `index` + "`" + `
+FROM ` + "`" + `cursors` + "`" + `
+WHERE ` + "`" + `type` + "`" + ` = 'DB_APPLIED_OUTPUT_SEQ'
+`
+
+func (q *Queries) LoadDBAppliedCursor(ctx context.Context) (int64, error) {
+	row := q.queryRow(ctx, q.loadDBAppliedCursorStmt, loadDBAppliedCursor)
+	var index int64
+	err := row.Scan(&index)
+	return index, err
+}
+
 const loadMQPublishedCursor = `-- name: LoadMQPublishedCursor :one
 SELECT ` + "`" + `index` + "`" + `
 FROM ` + "`" + `cursors` + "`" + `

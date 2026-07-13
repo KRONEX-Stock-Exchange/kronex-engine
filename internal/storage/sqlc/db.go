@@ -30,6 +30,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.latestSnapshotStmt, err = db.PrepareContext(ctx, latestSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query LatestSnapshot: %w", err)
 	}
+	if q.loadDBAppliedCursorStmt, err = db.PrepareContext(ctx, loadDBAppliedCursor); err != nil {
+		return nil, fmt.Errorf("error preparing query LoadDBAppliedCursor: %w", err)
+	}
 	if q.loadMQPublishedCursorStmt, err = db.PrepareContext(ctx, loadMQPublishedCursor); err != nil {
 		return nil, fmt.Errorf("error preparing query LoadMQPublishedCursor: %w", err)
 	}
@@ -76,6 +79,11 @@ func (q *Queries) Close() error {
 	if q.latestSnapshotStmt != nil {
 		if cerr := q.latestSnapshotStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing latestSnapshotStmt: %w", cerr)
+		}
+	}
+	if q.loadDBAppliedCursorStmt != nil {
+		if cerr := q.loadDBAppliedCursorStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing loadDBAppliedCursorStmt: %w", cerr)
 		}
 	}
 	if q.loadMQPublishedCursorStmt != nil {
@@ -174,6 +182,7 @@ type Queries struct {
 	tx                        *sql.Tx
 	activateAccountStmt       *sql.Stmt
 	latestSnapshotStmt        *sql.Stmt
+	loadDBAppliedCursorStmt   *sql.Stmt
 	loadMQPublishedCursorStmt *sql.Stmt
 	rejectOrderStmt           *sql.Stmt
 	saveDBAppliedCursorStmt   *sql.Stmt
@@ -193,6 +202,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		tx:                        tx,
 		activateAccountStmt:       q.activateAccountStmt,
 		latestSnapshotStmt:        q.latestSnapshotStmt,
+		loadDBAppliedCursorStmt:   q.loadDBAppliedCursorStmt,
 		loadMQPublishedCursorStmt: q.loadMQPublishedCursorStmt,
 		rejectOrderStmt:           q.rejectOrderStmt,
 		saveDBAppliedCursorStmt:   q.saveDBAppliedCursorStmt,

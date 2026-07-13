@@ -11,12 +11,13 @@ import (
 type Querier interface {
 	ActivateAccount(ctx context.Context, id int32) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
+	LoadDBAppliedCursor(ctx context.Context) (int64, error)
 	LoadMQPublishedCursor(ctx context.Context) (int64, error)
 	RejectOrder(ctx context.Context, arg RejectOrderParams) error
 	SaveDBAppliedCursor(ctx context.Context, index int64) error
 	SaveMQPublishedCursor(ctx context.Context, index int64) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
-	SaveTrade(ctx context.Context, arg SaveTradeParams) (int64, error)
+	SaveTrade(ctx context.Context, arg SaveTradeParams) error
 	UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) error
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
 	UpdateStockPrice(ctx context.Context, arg UpdateStockPriceParams) error
