@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	ActivateAccount(ctx context.Context, id int32) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
+	LoadDBAppliedCursor(ctx context.Context) (int64, error)
 	LoadMQPublishedCursor(ctx context.Context) (int64, error)
 	RejectOrder(ctx context.Context, arg RejectOrderParams) error
 	SaveDBAppliedCursor(ctx context.Context, index int64) error

@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	_ publisher.Store = (*EventStore)(nil)
-	_ publisher.Tx    = (*eventTx)(nil)
+	_ publisher.DBProjectorStore    = (*EventStore)(nil)
+	_ publisher.EventPublisherStore = (*EventStore)(nil)
+	_ publisher.Tx                  = (*eventTx)(nil)
 )
 
 type EventStore struct {
@@ -40,6 +41,18 @@ func (s *EventStore) Begin(ctx context.Context) (publisher.Tx, error) {
 	}
 
 	return &eventTx{tx: tx, q: s.q.WithTx(tx)}, nil
+}
+
+// DB 반영 cursor 로드. 행이 없으면(최초 부팅) 0 반환.
+func (s *EventStore) LoadDBAppliedCursor(ctx context.Context) (uint64, error) {
+	idx, err := s.q.LoadDBAppliedCursor(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("load DB applied cursor: %w", err)
+	}
+	return uint64(idx), nil
 }
 
 // MQ 발행 커서 로드. 행이 없으면(최초 부팅) 0 반환.

@@ -57,7 +57,7 @@ func main() {
 	defer engine.Close()
 
 	// 퍼블리셔
-	pub := publisher.New(engine.Output(), engine.OutputSignal(), eventStore, mq, cfg.RabbitMQ.EventQueue)
+	pub := publisher.NewHandler(engine.Output(), engine.OutputSignal(), eventStore, eventStore, mq, cfg.RabbitMQ.EventQueue)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

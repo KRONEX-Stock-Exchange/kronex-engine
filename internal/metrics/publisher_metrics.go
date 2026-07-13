@@ -10,9 +10,9 @@ import (
 
 const PublisherLogInterval = 5 * time.Second
 
-// PublisherReporter keeps Publisher processing measurements and emits a compact
-// summary periodically. The callbacks keep this package independent of WAL,
-// database, and message-queue implementations.
+// PublisherReporter keeps EventPublisher measurements and emits a compact
+// summary periodically. The callbacks keep this package independent of WAL
+// and message-queue implementations.
 type PublisherReporter struct {
 	outputLast func() (uint64, error)
 	published  func() uint64
@@ -24,8 +24,6 @@ type PublisherReporter struct {
 
 	walWaitTotal time.Duration
 	walWaitMax   time.Duration
-	dbTotal      time.Duration
-	dbMax        time.Duration
 	mqTotal      time.Duration
 	mqMax        time.Duration
 	totalTotal   time.Duration
@@ -35,7 +33,6 @@ type PublisherReporter struct {
 type PublisherRecord struct {
 	EventCount int
 	WALWait    time.Duration
-	DBApply    time.Duration
 	MQConfirm  time.Duration
 	WALToMQ    time.Duration
 }
@@ -45,8 +42,6 @@ type publisherSnapshot struct {
 	events       uint64
 	walWaitTotal time.Duration
 	walWaitMax   time.Duration
-	dbTotal      time.Duration
-	dbMax        time.Duration
 	mqTotal      time.Duration
 	mqMax        time.Duration
 	totalTotal   time.Duration
@@ -66,14 +61,10 @@ func (r *PublisherReporter) Record(record PublisherRecord) {
 	r.completed++
 	r.events += uint64(record.EventCount)
 	r.walWaitTotal += record.WALWait
-	r.dbTotal += record.DBApply
 	r.mqTotal += record.MQConfirm
 	r.totalTotal += record.WALToMQ
 	if record.WALWait > r.walWaitMax {
 		r.walWaitMax = record.WALWait
-	}
-	if record.DBApply > r.dbMax {
-		r.dbMax = record.DBApply
 	}
 	if record.MQConfirm > r.mqMax {
 		r.mqMax = record.MQConfirm
@@ -89,7 +80,7 @@ func (r *PublisherReporter) Run(ctx context.Context) {
 
 	last, err := r.outputLast()
 	if err != nil {
-		log.Printf("publisher metrics: output last index: %v", err)
+		log.Printf("event publisher metrics: output last index: %v", err)
 		last = 0
 	}
 
@@ -106,7 +97,7 @@ func (r *PublisherReporter) Run(ctx context.Context) {
 func (r *PublisherReporter) logWindow(last *uint64) {
 	currentLast, err := r.outputLast()
 	if err != nil {
-		log.Printf("publisher metrics: output last index: %v", err)
+		log.Printf("event publisher metrics: output last index: %v", err)
 		return
 	}
 	published := r.published()
@@ -134,7 +125,6 @@ func (r *PublisherReporter) snapshotAndReset() publisherSnapshot {
 	s := publisherSnapshot{
 		completed: r.completed, events: r.events,
 		walWaitTotal: r.walWaitTotal, walWaitMax: r.walWaitMax,
-		dbTotal: r.dbTotal, dbMax: r.dbMax,
 		mqTotal: r.mqTotal, mqMax: r.mqMax,
 		totalTotal: r.totalTotal, totalMax: r.totalMax,
 	}
@@ -142,8 +132,6 @@ func (r *PublisherReporter) snapshotAndReset() publisherSnapshot {
 	r.events = 0
 	r.walWaitTotal = 0
 	r.walWaitMax = 0
-	r.dbTotal = 0
-	r.dbMax = 0
 	r.mqTotal = 0
 	r.mqMax = 0
 	r.totalTotal = 0
@@ -153,18 +141,17 @@ func (r *PublisherReporter) snapshotAndReset() publisherSnapshot {
 
 func logPublisherWindow(outputLast, published, backlog, produced uint64, s publisherSnapshot) {
 	if s.completed == 0 {
-		log.Printf("publisher metrics window=%s output_last=%d mq_published=%d backlog=%d produced_rate=%.1f/s drained_rate=0.0/s", PublisherLogInterval, outputLast, published, backlog, float64(produced)/PublisherLogInterval.Seconds())
+		log.Printf("event publisher metrics window=%s output_last=%d event_published=%d backlog=%d produced_rate=%.1f/s drained_rate=0.0/s", PublisherLogInterval, outputLast, published, backlog, float64(produced)/PublisherLogInterval.Seconds())
 		return
 	}
 
 	count := time.Duration(s.completed)
 	log.Printf(
-		"publisher metrics window=%s output_last=%d mq_published=%d backlog=%d produced_rate=%.1f/s drained_rate=%.1f/s completed=%d events=%d wal_wait_avg=%s wal_wait_max=%s db_apply_avg=%s db_apply_max=%s mq_confirm_avg=%s mq_confirm_max=%s wal_to_mq_avg=%s wal_to_mq_max=%s",
+		"event publisher metrics window=%s output_last=%d event_published=%d backlog=%d produced_rate=%.1f/s drained_rate=%.1f/s completed=%d events=%d wal_wait_avg=%s wal_wait_max=%s mq_confirm_avg=%s mq_confirm_max=%s wal_to_mq_avg=%s wal_to_mq_max=%s",
 		PublisherLogInterval, outputLast, published, backlog,
 		float64(produced)/PublisherLogInterval.Seconds(), float64(s.completed)/PublisherLogInterval.Seconds(),
 		s.completed, s.events,
 		s.walWaitTotal/count, s.walWaitMax,
-		s.dbTotal/count, s.dbMax,
 		s.mqTotal/count, s.mqMax,
 		s.totalTotal/count, s.totalMax,
 	)
