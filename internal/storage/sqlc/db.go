@@ -27,6 +27,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.activateAccountStmt, err = db.PrepareContext(ctx, activateAccount); err != nil {
 		return nil, fmt.Errorf("error preparing query ActivateAccount: %w", err)
 	}
+	if q.deleteHoldingStmt, err = db.PrepareContext(ctx, deleteHolding); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteHolding: %w", err)
+	}
 	if q.latestSnapshotStmt, err = db.PrepareContext(ctx, latestSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query LatestSnapshot: %w", err)
 	}
@@ -74,6 +77,11 @@ func (q *Queries) Close() error {
 	if q.activateAccountStmt != nil {
 		if cerr := q.activateAccountStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing activateAccountStmt: %w", cerr)
+		}
+	}
+	if q.deleteHoldingStmt != nil {
+		if cerr := q.deleteHoldingStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteHoldingStmt: %w", cerr)
 		}
 	}
 	if q.latestSnapshotStmt != nil {
@@ -181,6 +189,7 @@ type Queries struct {
 	db                        DBTX
 	tx                        *sql.Tx
 	activateAccountStmt       *sql.Stmt
+	deleteHoldingStmt         *sql.Stmt
 	latestSnapshotStmt        *sql.Stmt
 	loadDBAppliedCursorStmt   *sql.Stmt
 	loadMQPublishedCursorStmt *sql.Stmt
@@ -201,6 +210,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		db:                        tx,
 		tx:                        tx,
 		activateAccountStmt:       q.activateAccountStmt,
+		deleteHoldingStmt:         q.deleteHoldingStmt,
 		latestSnapshotStmt:        q.latestSnapshotStmt,
 		loadDBAppliedCursorStmt:   q.loadDBAppliedCursorStmt,
 		loadMQPublishedCursorStmt: q.loadMQPublishedCursorStmt,

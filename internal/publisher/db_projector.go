@@ -147,6 +147,10 @@ func applyEvent(ctx context.Context, tx Tx, ev core.OutputEvent) error {
 		if err := json.Unmarshal(ev.Data, &holding); err != nil {
 			return fmt.Errorf("unmarshal holding: %w", err)
 		}
+		if holding.Quantity == 0 && holding.AvailableQuantity == 0 {
+			return tx.DeleteHolding(ctx, holding.AccountId, holding.StockId)
+		}
+
 		return tx.UpsertHolding(ctx, holding)
 	case core.PatternStockListed:
 		var stock domain.Stock

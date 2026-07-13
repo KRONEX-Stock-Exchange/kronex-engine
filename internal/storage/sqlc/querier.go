@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	ActivateAccount(ctx context.Context, id int32) error
+	DeleteHolding(ctx context.Context, arg DeleteHoldingParams) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	LoadDBAppliedCursor(ctx context.Context) (int64, error)
 	LoadMQPublishedCursor(ctx context.Context) (int64, error)

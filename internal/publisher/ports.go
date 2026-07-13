@@ -25,6 +25,7 @@ type Tx interface {
 	UpdateStockStatus(ctx context.Context, stockID int32, status string) error
 	UpdateStockPrice(ctx context.Context, stockID int32, price uint64) error
 	UpsertHolding(ctx context.Context, holding domain.StockBalance) error
+	DeleteHolding(ctx context.Context, accountID, stockID int32) error
 	SaveDBAppliedCursor(ctx context.Context, index uint64) error
 	Commit() error
 	Rollback() error

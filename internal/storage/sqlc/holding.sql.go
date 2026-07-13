@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const deleteHolding = `-- name: DeleteHolding :exec
+DELETE FROM user_stocks
+WHERE account_id = ?
+  AND stock_id = ?
+`
+
+type DeleteHoldingParams struct {
+	AccountID int32 `json:"account_id"`
+	StockID   int32 `json:"stock_id"`
+}
+
+func (q *Queries) DeleteHolding(ctx context.Context, arg DeleteHoldingParams) error {
+	_, err := q.exec(ctx, q.deleteHoldingStmt, deleteHolding, arg.AccountID, arg.StockID)
+	return err
+}
+
 const upsertHolding = `-- name: UpsertHolding :exec
 INSERT INTO user_stocks (account_id, stock_id, quantity, available_quantity, average, total_buy_amount)
 VALUES (?, ?, ?, ?, ?, ?)
