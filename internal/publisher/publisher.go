@@ -24,7 +24,7 @@ type Store interface {
 }
 
 type Tx interface {
-	SaveTrade(ctx context.Context, trade domain.Trade) (int64, error)
+	SaveTrade(ctx context.Context, trade domain.Trade) error
 	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
 	RejectOrder(ctx context.Context, orderID int64, reason string) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
@@ -181,14 +181,9 @@ func (p *Publisher) applyToDB(ctx context.Context, index uint64, events []core.O
 			if err := json.Unmarshal(ev.Data, &tr); err != nil {
 				return fmt.Errorf("unmarshal trade: %w", err)
 			}
-			id, err := tx.SaveTrade(ctx, tr)
+			err := tx.SaveTrade(ctx, tr)
 			if err != nil {
 				return err
-			}
-			tr.Id = id
-			ev.Data, err = json.Marshal(tr)
-			if err != nil {
-				return fmt.Errorf("marshal saved trade: %w", err)
 			}
 		case core.PatternOrderOpen, core.PatternOrderFilled, core.PatternOrderCanceled:
 			var oe domain.OrderEvent

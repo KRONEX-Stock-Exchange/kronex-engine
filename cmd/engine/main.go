@@ -46,7 +46,8 @@ func main() {
 
 	// 엔진
 	snapStore := storage.NewSnapshotStore(db)
-	engine, err := core.NewEngine(mq, snapStore, map[string]core.Plane{
+	eventStore := storage.NewEventStore(db)
+	engine, err := core.NewEngine(mq, snapStore, eventStore, map[string]core.Plane{
 		cfg.RabbitMQ.DataQueue:  core.PlaneData,
 		cfg.RabbitMQ.AdminQueue: core.PlaneAdmin,
 	})
@@ -56,7 +57,6 @@ func main() {
 	defer engine.Close()
 
 	// 퍼블리셔
-	eventStore := storage.NewEventStore(db)
 	pub := publisher.New(engine.Output(), engine.OutputSignal(), eventStore, mq, cfg.RabbitMQ.EventQueue)
 
 	runCtx, cancel := context.WithCancel(ctx)

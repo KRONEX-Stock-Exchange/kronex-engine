@@ -296,8 +296,19 @@ func (e *Engine) match(order domain.Order) error {
 			e.state.StockBalances.Upsert(&sellerHold)
 		}
 
+		// Replay시 TradeID 중복 소비 방지
+		tradeID := int64(0)
+		if e.outputAppliedSeq == 0 || e.inputSeq > e.outputAppliedSeq {
+			nextTradeID, err := e.nextTradeID()
+			if err != nil {
+				return err
+			}
+			tradeID = nextTradeID
+		}
+
 		// 체결 내역
 		events = append(events, outEvent{PatternTradeExecuted, domain.Trade{
+			Id:           tradeID,
 			StockId:      order.StockId,
 			Price:        bestPrice,
 			Quantity:     filled,

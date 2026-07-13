@@ -25,6 +25,14 @@ func NewEventStore(db *sql.DB) *EventStore {
 	return &EventStore{db: db, q: sqlc.New(db)}
 }
 
+func (s *EventStore) LastTradeID(ctx context.Context) (int64, error) {
+	var id int64
+	if err := s.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(id), 0) FROM trades").Scan(&id); err != nil {
+		return 0, fmt.Errorf("load last trade id: %w", err)
+	}
+	return id, nil
+}
+
 func (s *EventStore) Begin(ctx context.Context) (publisher.Tx, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -68,8 +76,9 @@ func (t *eventTx) SaveDBAppliedCursor(ctx context.Context, index uint64) error {
 }
 
 // 체결 내역 저장
-func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) (int64, error) {
-	id, err := t.q.SaveTrade(ctx, sqlc.SaveTradeParams{
+func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) error {
+	err := t.q.SaveTrade(ctx, sqlc.SaveTradeParams{
+		ID:           tr.Id,
 		StockID:      tr.StockId,
 		Price:        tr.Price,
 		Quantity:     tr.Quantity,
@@ -78,10 +87,10 @@ func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) (int64, error)
 		MatchedAt:    tr.ExecutedAt,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("save trade: %w", err)
+		return fmt.Errorf("save trade: %w", err)
 	}
 
-	return id, nil
+	return nil
 }
 
 // 주문 상태/체결수량 갱신

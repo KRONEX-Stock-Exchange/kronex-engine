@@ -16,7 +16,7 @@ type Querier interface {
 	SaveDBAppliedCursor(ctx context.Context, index int64) error
 	SaveMQPublishedCursor(ctx context.Context, index int64) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
-	SaveTrade(ctx context.Context, arg SaveTradeParams) (int64, error)
+	SaveTrade(ctx context.Context, arg SaveTradeParams) error
 	UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) error
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
 	UpdateStockPrice(ctx context.Context, arg UpdateStockPriceParams) error

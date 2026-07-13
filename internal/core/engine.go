@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"time"
 
@@ -54,21 +55,23 @@ const (
 )
 
 type Engine struct {
-	con    Consumer
-	routes map[string]func(Delivery) error // 수신 큐 → 플레인 핸들러
-	input  *wal.WAL
-	output *wal.WAL
-	state  *ledger.State
-	store  SnapshotStore
+	con      Consumer
+	routes   map[string]func(Delivery) error // 수신 큐 → 플레인 핸들러
+	input    *wal.WAL
+	output   *wal.WAL
+	state    *ledger.State
+	store    SnapshotStore
+	tradeIDs TradeIDStore // NOTE: 기존 WAL 파일 양식에 맞추기 위한 임시 의존성
 
 	inputSeq         uint64            // 현재 처리 중인 입력 WAL 인덱스
 	outputAppliedSeq uint64            // 출력에 이미 반영된 최대 입력 인덱스 (복구 워터마크)
+	lastTradeID      int64             // Output WAL에 기록된 마지막 엔진 발급 체결 ID
 	dedup            *dedup            // 요청 종류별 최근 처리 ID (큐 재전달 중복 방지)
 	snapshots        chan snapshotData // 직렬화된 스냅샷 → DB 저장 goroutine 으로 전달
 	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
-func NewEngine(con Consumer, store SnapshotStore, queues map[string]Plane) (*Engine, error) {
+func NewEngine(con Consumer, store SnapshotStore, tradeIDs TradeIDStore, queues map[string]Plane) (*Engine, error) {
 	input, err := wal.Open("./data/wal/input", nil)
 	if err != nil {
 		return nil, fmt.Errorf("open input wal: %w", err)
@@ -85,6 +88,7 @@ func NewEngine(con Consumer, store SnapshotStore, queues map[string]Plane) (*Eng
 		output:       output,
 		state:        ledger.NewState(),
 		store:        store,
+		tradeIDs:     tradeIDs,
 		dedup:        newDedup(dedupWindow),
 		snapshots:    make(chan snapshotData, 1),
 		outputSignal: make(chan struct{}, 1),
@@ -269,7 +273,68 @@ func (e *Engine) Replay(ctx context.Context) error {
 	return nil
 }
 
+// 가장 최근 TradeID 조회
+func (e *Engine) initializeTradeID(ctx context.Context) error {
+	last, err := e.output.LastIndex()
+	if err != nil {
+		return fmt.Errorf("output last index: %w", err)
+	}
+
+	// Trade.executed를 찾을 때까지 역방향 탐색
+	for i := last; i > 0; i-- {
+		raw, err := e.output.Read(i)
+		if err != nil {
+			return fmt.Errorf("read output %d: %w", i, err)
+		}
+		var env OutputEnvelope
+		if err := json.Unmarshal(raw, &env); err != nil {
+			return fmt.Errorf("unmarshal output envelope %d: %w", i, err)
+		}
+		for j := len(env.Events) - 1; j >= 0; j-- {
+			ev := env.Events[j]
+			if ev.Pattern != PatternTradeExecuted {
+				continue
+			}
+			var trade domain.Trade
+			if err := json.Unmarshal(ev.Data, &trade); err != nil {
+				return fmt.Errorf("unmarshal trade output %d: %w", i, err)
+			}
+			if trade.Id > 0 {
+				e.lastTradeID = trade.Id
+				return nil
+			}
+		}
+	}
+
+	if e.tradeIDs == nil {
+		return fmt.Errorf("load legacy trade id: no trade ID store")
+	}
+	lastTradeID, err := e.tradeIDs.LastTradeID(ctx)
+	if err != nil {
+		return fmt.Errorf("load legacy trade id: %w", err)
+	}
+	if lastTradeID < 0 {
+		return fmt.Errorf("load legacy trade id: invalid id %d", lastTradeID)
+	}
+	e.lastTradeID = lastTradeID
+	return nil
+}
+
+// TODO: 종목별 파티셔닝으로 변경될 경우 TradeID 형식을 변경해야됨
+func (e *Engine) nextTradeID() (int64, error) {
+	const maxTradeID = math.MaxInt64
+	if e.lastTradeID == maxTradeID {
+		return 0, fmt.Errorf("trade ID exhausted")
+	}
+	e.lastTradeID++
+	return e.lastTradeID, nil
+}
+
 func (e *Engine) Run(ctx context.Context) error {
+	if err := e.initializeTradeID(ctx); err != nil {
+		return fmt.Errorf("initialize trade ID: %w", err)
+	}
+
 	// 부팅 복구
 	log.Printf("replay: start")
 	if err := e.Replay(ctx); err != nil {
