@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/core"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
+	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/metrics"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/wal"
 )
 
@@ -36,22 +38,27 @@ type Tx interface {
 }
 
 type Publisher struct {
-	output     *wal.WAL
-	signal     <-chan struct{} // cap 1 (이미 처리 중일 경우에는 무시)
-	cursor     uint64          // 마지막으로 처리 완료한 Output WAL 인덱스
-	db         Store
-	mq         core.Publisher
-	eventQueue string
+	output            *wal.WAL
+	signal            <-chan struct{} // cap 1 (이미 처리 중일 경우에는 무시)
+	cursor            uint64          // 마지막으로 처리 완료한 Output WAL 인덱스
+	eventPublishedSeq atomic.Uint64   // event_queue 발행 완료된 마지막 Output WAL 인덱스
+	db                Store
+	mq                core.Publisher
+	eventQueue        string
+	metrics           *metrics.PublisherReporter
 }
 
 func New(output *wal.WAL, signal <-chan struct{}, db Store, mq core.Publisher, eventQueue string) *Publisher {
-	return &Publisher{
+	p := &Publisher{
 		output:     output,
 		signal:     signal,
 		db:         db,
 		mq:         mq,
 		eventQueue: eventQueue,
 	}
+
+	p.metrics = metrics.NewPublisherReporter(p.output.LastIndex, p.eventPublishedSeq.Load)
+	return p
 }
 
 func (p *Publisher) Run(ctx context.Context) error {
@@ -63,6 +70,9 @@ func (p *Publisher) Run(ctx context.Context) error {
 		return fmt.Errorf("load MQ published cursor: %w", err)
 	}
 	p.cursor = cursor
+	p.eventPublishedSeq.Store(cursor)
+
+	go p.metrics.Run(ctx)
 
 	backstop := time.NewTicker(backstopInterval)
 	defer backstop.Stop()
@@ -97,36 +107,62 @@ func (p *Publisher) drain(ctx context.Context) error {
 		}
 
 		// DB 저장
-		env, err := p.handleRecord(ctx, next, data)
+		env, dbStarted, dbDuration, err := p.handleRecord(ctx, next, data)
 		if err != nil {
 			return fmt.Errorf("handle output %d: %w", next, err)
 		}
 
-		// 이벤트 전송 후 MQ 발행 커서 저장
+		// 이벤트 전송 및 publisher confirm 대기
+		mqStarted := time.Now()
 		if err := p.publish(ctx, env); err != nil {
 			return fmt.Errorf("publish output %d: %w", next, err)
 		}
+		mqDuration := time.Since(mqStarted)
 		if err := p.db.SaveMQPublishedCursor(ctx, next); err != nil {
 			return fmt.Errorf("save MQ published cursor %d: %w", next, err)
 		}
 
 		p.cursor = next
+		p.eventPublishedSeq.Store(next)
+
+		// Publisher Metrics
+		walWait := time.Duration(0)
+		if !env.CreatedAt.IsZero() {
+			walWait = dbStarted.Sub(env.CreatedAt)
+			if walWait < 0 {
+				walWait = 0
+			}
+		}
+		walToMQ := time.Since(dbStarted)
+		if !env.CreatedAt.IsZero() {
+			walToMQ = time.Since(env.CreatedAt)
+			if walToMQ < 0 {
+				walToMQ = 0
+			}
+		}
+		p.metrics.Record(metrics.PublisherRecord{
+			EventCount: len(env.Events),
+			WALWait:    walWait,
+			DBApply:    dbDuration,
+			MQConfirm:  mqDuration,
+			WALToMQ:    walToMQ,
+		})
 	}
 	return nil
 }
 
-func (p *Publisher) handleRecord(ctx context.Context, index uint64, raw []byte) (core.OutputEnvelope, error) {
+func (p *Publisher) handleRecord(ctx context.Context, index uint64, raw []byte) (core.OutputEnvelope, time.Time, time.Duration, error) {
 	var env core.OutputEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return core.OutputEnvelope{}, fmt.Errorf("unmarshal output envelope: %w", err)
+		return core.OutputEnvelope{}, time.Time{}, 0, fmt.Errorf("unmarshal output envelope: %w", err)
 	}
 
-	// DB 저장
+	dbStarted := time.Now()
 	if err := p.applyToDB(ctx, index, env.Events); err != nil {
-		return core.OutputEnvelope{}, err
+		return core.OutputEnvelope{}, dbStarted, time.Since(dbStarted), err
 	}
 
-	return env, nil
+	return env, dbStarted, time.Since(dbStarted), nil
 }
 
 func (p *Publisher) applyToDB(ctx context.Context, index uint64, events []core.OutputEvent) error {

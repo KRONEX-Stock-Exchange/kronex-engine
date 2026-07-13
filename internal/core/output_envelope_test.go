@@ -42,4 +42,7 @@ func TestAppendOutputRecordsInputAndOutputSequences(t *testing.T) {
 	if env.OutputSeq != 2 {
 		t.Errorf("output sequence = %d, want 2", env.OutputSeq)
 	}
+	if env.CreatedAt.IsZero() {
+		t.Error("createdAt is not recorded")
+	}
 }

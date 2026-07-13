@@ -394,6 +394,7 @@ type OutputEvent struct {
 type OutputEnvelope struct {
 	InputSeq  uint64        `json:"inputSeq"`  // 이 출력을 만든 Input WAL 인덱스
 	OutputSeq uint64        `json:"outputSeq"` // 이 봉투가 기록된 Output WAL 인덱스
+	CreatedAt time.Time     `json:"createdAt"` // Output WAL 기록 시각 (Publisher 지연 측정용)
 	Events    []OutputEvent `json:"events"`
 }
 
@@ -421,10 +422,12 @@ func (e *Engine) appendOutput(events ...outEvent) error {
 		}
 		out = append(out, OutputEvent{Pattern: ev.pattern, Data: raw})
 	}
+	createdAt := time.Now().UTC()
 	if _, err := e.output.AppendWithIndex(func(outputSeq uint64) ([]byte, error) {
 		return json.Marshal(OutputEnvelope{
 			InputSeq:  e.inputSeq,
 			OutputSeq: outputSeq,
+			CreatedAt: createdAt,
 			Events:    out,
 		})
 	}); err != nil {
