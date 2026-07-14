@@ -189,6 +189,17 @@ func (t *eventTx) UpsertHolding(ctx context.Context, h domain.StockBalance) erro
 	return nil
 }
 
+// 보유수량과 가용수량이 모두 0인 보유종목 삭제
+func (t *eventTx) DeleteHolding(ctx context.Context, accountID, stockID int32) error {
+	if err := t.q.DeleteHolding(ctx, sqlc.DeleteHoldingParams{
+		AccountID: accountID,
+		StockID:   stockID,
+	}); err != nil {
+		return fmt.Errorf("delete user stock (account=%d stock=%d): %w", accountID, stockID, err)
+	}
+	return nil
+}
+
 func (t *eventTx) Commit() error {
 	return t.tx.Commit()
 }

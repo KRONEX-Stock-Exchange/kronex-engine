@@ -6,3 +6,8 @@ ON DUPLICATE KEY UPDATE
   available_quantity = VALUES(available_quantity),
   average = VALUES(average),
   total_buy_amount = VALUES(total_buy_amount);
+
+-- name: DeleteHolding :exec
+DELETE FROM user_stocks
+WHERE account_id = ?
+  AND stock_id = ?;
