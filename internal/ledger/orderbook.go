@@ -122,6 +122,7 @@ func (b *OrderBook) LevelQuantity(side domain.TradingType, price uint64) uint64 
 
 // 노드를 호가창에서 제거하고 index/가격 슬라이스를 동기화
 // 빈 가격대는 가격 슬라이스에서도 함께 정리
+// TODO: 인자값을 ref만 받거나 orderId만 받거나 둘중에 하나로 정리하는게 좋을듯
 func (b *OrderBook) removeRef(orderId int64, ref *orderRef) {
 	side := b.buy
 	prices := &b.buyPrices

@@ -17,6 +17,7 @@ const (
 	RejectInsufficientBalance RejectReason = "INSUFFICIENT_BALANCE"
 	RejectInsufficientStock   RejectReason = "INSUFFICIENT_STOCK"
 	RejectStockNotTradable    RejectReason = "STOCK_NOT_TRADABLE"
+	RejectOrderNotActive      RejectReason = "ORDER_NOT_ACTIVE"
 )
 
 type RejectError struct {
@@ -61,6 +62,19 @@ func (e *Engine) validateOrder(order domain.Order) error {
 		if order.TargetId <= 0 {
 			return reject(RejectInvalidOrder, "invalid target id %d", order.TargetId)
 		}
+		if order.FilledQuantity != 0 {
+			return reject(RejectInvalidOrder, "invalid filled quantity %d for amend/cancel request", order.FilledQuantity)
+		}
+
+		ob := e.state.OrderBooks.Get(order.StockId)
+		target, ok := ob.Get(order.TargetId)
+		if !ok {
+			return reject(RejectOrderNotActive, "target order %d is not active", order.TargetId)
+		}
+		if target.AccountId != order.AccountId {
+			return reject(RejectOrderNotActive, "target order %d is not active", order.TargetId)
+		}
+
 		return nil
 	default:
 		return reject(RejectInvalidOrder, "unknown trading type %d", order.TradingType)
@@ -158,6 +172,7 @@ func orderStatusPattern(order domain.Order) string {
 	}
 }
 
+// TODO: 미체결 지정가 주문시 UpdateHolding 이벤트가 발생하는 문제 수정하기
 // CONSIDER: 자전거래 관련 로직 고려해보기
 func (e *Engine) match(order domain.Order) error {
 	ob := e.state.OrderBooks.Get(order.StockId)
@@ -436,14 +451,65 @@ func orderBookSide(side domain.TradingType) string {
 	return "BUY"
 }
 
+// 주문 이벤트 형태 변환용
+func orderEvent(order domain.Order) domain.OrderEvent {
+	return domain.OrderEvent{
+		OrderId:        order.Id,
+		AccountId:      order.AccountId,
+		StockId:        order.StockId,
+		Price:          order.Price,
+		Quantity:       order.Quantity,
+		FilledQuantity: order.FilledQuantity,
+	}
+}
+
 // TODO: 주문 정정 로직 연결
 func (e *Engine) edit(order domain.Order) error {
 	log.Printf("engine: edit order id=%d", order.Id)
 	return nil
 }
 
-// TODO: 주문 취소 로직 연결
 func (e *Engine) cancel(order domain.Order) error {
 	log.Printf("engine: cancel order id=%d", order.Id)
+
+	ob := e.state.OrderBooks.Get(order.StockId)
+	target, _ := ob.Get(order.TargetId)
+
+	ob.Cancel(order.TargetId)
+
+	events := []outEvent{
+		{PatternOrderCanceled, orderEvent(target)},
+		{PatternOrderCompleted, orderEvent(order)},
+		{PatternOrderBookUpdated, domain.OrderBookUpdated{
+			StockId: target.StockId,
+			Levels: []domain.OrderBookLevel{{
+				Side:     orderBookSide(target.TradingType),
+				Price:    target.Price,
+				Quantity: ob.LevelQuantity(target.TradingType, target.Price),
+			}},
+		}},
+	}
+
+	// 잔고 복구
+	remaining := target.Quantity - target.FilledQuantity
+	switch target.TradingType {
+	case domain.TRADING_BUY:
+		if account, exists := e.state.Accounts.Get(target.AccountId); exists {
+			account.AvailableBalance += target.Price * remaining
+			e.state.Accounts.Upsert(&account)
+			events = append(events, outEvent{PatternAccountUpdated, account})
+		}
+	case domain.TRADING_SELL:
+		if holding, exists := e.state.StockBalances.Get(target.AccountId, target.StockId); exists {
+			holding.AvailableQuantity += remaining
+			e.state.StockBalances.Upsert(&holding)
+			events = append(events, outEvent{PatternHoldingUpdated, holding})
+		}
+	}
+
+	if err := e.appendOutput(events...); err != nil {
+		panic(fmt.Errorf("engine: append cancel output wal: %w", err))
+	}
+
 	return nil
 }

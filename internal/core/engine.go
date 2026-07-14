@@ -30,6 +30,7 @@ const (
 	PatternOrderOpen        = "order.open"        // 호가창 등록(미체결/부분체결 잔량)
 	PatternOrderFilled      = "order.filled"      // 전량 체결
 	PatternOrderCanceled    = "order.canceled"    // 취소(시장가 미체결 잔량 등)
+	PatternOrderCompleted   = "order.completed"   // 정정/취소 요청 처리 완료
 	PatternOrderRejected    = "order.rejected"    // 유효성 검사 실패로 거부
 	PatternAccountUpdated   = "account.updated"   // 계좌 잔고 변동
 	PatternAccountActivated = "account.activated" // 계좌 활성화
@@ -185,6 +186,7 @@ func (e *Engine) Close() error {
 	return errors.Join(e.input.Close(), e.output.Close())
 }
 
+// TODO: 유효 하지 않은 주문은 Replay 대상에서 제외하기
 func (e *Engine) Replay(ctx context.Context) error {
 	// 최신 스냅샷 로드
 	var lastSnapshotIdx uint64
