@@ -191,7 +191,7 @@ const (
 	OrdersRejectReasonINSUFFICIENTSTOCK   OrdersRejectReason = "INSUFFICIENT_STOCK"
 	OrdersRejectReasonPRICEOUTOFLIMIT     OrdersRejectReason = "PRICE_OUT_OF_LIMIT"
 	OrdersRejectReasonSTOCKNOTTRADABLE    OrdersRejectReason = "STOCK_NOT_TRADABLE"
-	OrdersRejectReasonALREADYPROCESSED    OrdersRejectReason = "ALREADY_PROCESSED"
+	OrdersRejectReasonORDERNOTACTIVE      OrdersRejectReason = "ORDER_NOT_ACTIVE"
 )
 
 func (e *OrdersRejectReason) Scan(src interface{}) error {
@@ -232,12 +232,13 @@ func (ns NullOrdersRejectReason) Value() (driver.Value, error) {
 type OrdersStatus string
 
 const (
-	OrdersStatusRECEIVED OrdersStatus = "RECEIVED"
-	OrdersStatusOPEN     OrdersStatus = "OPEN"
-	OrdersStatusFILLED   OrdersStatus = "FILLED"
-	OrdersStatusCANCELED OrdersStatus = "CANCELED"
-	OrdersStatusREPLACED OrdersStatus = "REPLACED"
-	OrdersStatusREJECTED OrdersStatus = "REJECTED"
+	OrdersStatusRECEIVED  OrdersStatus = "RECEIVED"
+	OrdersStatusOPEN      OrdersStatus = "OPEN"
+	OrdersStatusFILLED    OrdersStatus = "FILLED"
+	OrdersStatusCANCELED  OrdersStatus = "CANCELED"
+	OrdersStatusREPLACED  OrdersStatus = "REPLACED"
+	OrdersStatusREJECTED  OrdersStatus = "REJECTED"
+	OrdersStatusCOMPLETED OrdersStatus = "COMPLETED"
 )
 
 func (e *OrdersStatus) Scan(src interface{}) error {
