@@ -3,11 +3,12 @@ package domain
 import "time"
 
 type Trade struct {
-	Id           int64     `json:"id,string"`
-	StockId      int32     `json:"stockId,string"`
-	Price        uint64    `json:"price,string"`
-	Quantity     uint64    `json:"quantity,string"`
-	MakerOrderId int64     `json:"makerOrderId,string"` // 기존 주문
-	TakerOrderId int64     `json:"takerOrderId,string"` // 신규 주문
-	ExecutedAt   time.Time `json:"executedAt"`
+	Id           int64       `json:"id,string"`
+	StockId      int32       `json:"stockId,string"`
+	Price        uint64      `json:"price,string"`
+	Quantity     uint64      `json:"quantity,string"`
+	MakerOrderId int64       `json:"makerOrderId,string"` // 기존 주문
+	TakerOrderId int64       `json:"takerOrderId,string"` // 신규 주문
+	TradingType  TradingType `json:"tradingType"`         // 신규 주문(taker)의 매수·매도 방향
+	ExecutedAt   time.Time   `json:"executedAt"`
 }

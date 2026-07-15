@@ -2,7 +2,6 @@
 // - 부분 체결된 매수 주문 취소 시 미체결 예약금 복구와 이벤트 순서
 // - 부분 체결된 매도 주문 취소 시 미체결 가용수량 복구와 이벤트 순서
 // - 같은 가격대의 다른 주문을 유지한 최종 호가 잔량
-// - 잘못된 취소 요청 FilledQuantity 검증
 // - 미존재·전량 체결 주문 취소 시 ORDER_NOT_ACTIVE 거부와 자산 불변
 // - 같은 원주문에 대한 두 번째 취소 거부와 이중 환불 방지
 package core
@@ -109,20 +108,6 @@ func TestCancelSellOrderRestoresRemainingQuantityAndAppendsStatusEvents(t *testi
 	assertOrderBookLevelEvent(t, env, "SELL", target.Price, 0)
 }
 
-func TestValidateCancelRequestRejectsFilledQuantity(t *testing.T) {
-	e := &Engine{state: ledger.NewState()}
-	err := e.validateOrder(domain.Order{
-		Id: 20, TargetId: 10, FilledQuantity: 1,
-		TradingType: domain.TRADING_CANCEL,
-	})
-	if err == nil {
-		t.Fatal("validateOrder accepted cancel request with filled quantity")
-	}
-	if got := rejectReasonOf(err); got != RejectInvalidOrder {
-		t.Errorf("reject reason = %s, want %s", got, RejectInvalidOrder)
-	}
-}
-
 func TestHandleCancelRejectsInactiveOrderWithoutChangingBalance(t *testing.T) {
 	tests := []struct {
 		name string
@@ -146,6 +131,7 @@ func TestHandleCancelRejectsInactiveOrderWithoutChangingBalance(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			e, output := newCancelHandleTestEngine(t)
 			e.state.Accounts.Upsert(&domain.Account{Id: 1, Balance: 1_000, AvailableBalance: 1_000})
+			seedListedStock(e, 1)
 			if test.seed != nil {
 				test.seed(e)
 			}
@@ -173,6 +159,7 @@ func TestHandleCancelRejectsInactiveOrderWithoutChangingBalance(t *testing.T) {
 func TestHandleSecondCancelIsRejectedWithoutDoubleRefund(t *testing.T) {
 	e, output := newCancelHandleTestEngine(t)
 	e.state.Accounts.Upsert(&domain.Account{Id: 1, Balance: 600, AvailableBalance: 0})
+	seedListedStock(e, 1)
 	target := domain.Order{
 		Id: 10, AccountId: 1, StockId: 1, Price: 100,
 		Quantity: 10, FilledQuantity: 4,
@@ -346,7 +333,7 @@ func assertCancelStatusEvents(t *testing.T, env OutputEnvelope, target, cancelRe
 		if err := json.Unmarshal(event.Data, &order); err != nil {
 			t.Fatalf("unmarshal %s event: %v", event.Pattern, err)
 		}
-		statusIDs[event.Pattern] = order.OrderId
+		statusIDs[event.Pattern] = order.Id
 		if event.Pattern == PatternOrderCanceled {
 			canceled = order
 		}

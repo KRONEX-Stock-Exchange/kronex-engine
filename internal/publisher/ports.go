@@ -18,7 +18,7 @@ type EventPublisherStore interface {
 
 type Tx interface {
 	SaveTrade(ctx context.Context, trade domain.Trade) error
-	UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error
+	UpdateOrderState(ctx context.Context, orderID int64, status string, quantity, filledQty uint64) error
 	RejectOrder(ctx context.Context, orderID int64, reason string) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
 	ActivateAccount(ctx context.Context, accountID int32) error
