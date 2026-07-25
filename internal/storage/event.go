@@ -106,14 +106,15 @@ func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) error {
 	return nil
 }
 
-// 주문 상태/체결수량 갱신
-func (t *eventTx) UpdateOrderStatus(ctx context.Context, orderID int64, status string, filledQty uint64) error {
-	if err := t.q.UpdateOrderStatus(ctx, sqlc.UpdateOrderStatusParams{
+// 주문 상태/수량/체결수량 갱신
+func (t *eventTx) UpdateOrderState(ctx context.Context, orderID int64, status string, quantity, filledQty uint64) error {
+	if err := t.q.UpdateOrderState(ctx, sqlc.UpdateOrderStateParams{
 		Status:         sqlc.OrdersStatus(status),
+		Quantity:       quantity,
 		FilledQuantity: filledQty,
 		ID:             orderID,
 	}); err != nil {
-		return fmt.Errorf("update order %d status: %w", orderID, err)
+		return fmt.Errorf("update order %d state: %w", orderID, err)
 	}
 	return nil
 }

@@ -25,19 +25,25 @@ func (q *Queries) RejectOrder(ctx context.Context, arg RejectOrderParams) error 
 	return err
 }
 
-const updateOrderStatus = `-- name: UpdateOrderStatus :exec
+const updateOrderState = `-- name: UpdateOrderState :exec
 UPDATE orders
-SET status = ?, filled_quantity = ?
+SET status = ?, quantity = ?, filled_quantity = ?
 WHERE id = ?
 `
 
-type UpdateOrderStatusParams struct {
+type UpdateOrderStateParams struct {
 	Status         OrdersStatus `json:"status"`
+	Quantity       uint64       `json:"quantity"`
 	FilledQuantity uint64       `json:"filled_quantity"`
 	ID             int64        `json:"id"`
 }
 
-func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error {
-	_, err := q.exec(ctx, q.updateOrderStatusStmt, updateOrderStatus, arg.Status, arg.FilledQuantity, arg.ID)
+func (q *Queries) UpdateOrderState(ctx context.Context, arg UpdateOrderStateParams) error {
+	_, err := q.exec(ctx, q.updateOrderStateStmt, updateOrderState,
+		arg.Status,
+		arg.Quantity,
+		arg.FilledQuantity,
+		arg.ID,
+	)
 	return err
 }

@@ -118,12 +118,12 @@ func applyEvent(ctx context.Context, tx Tx, ev core.OutputEvent) error {
 			return fmt.Errorf("unmarshal trade: %w", err)
 		}
 		return tx.SaveTrade(ctx, trade)
-	case core.PatternOrderOpen, core.PatternOrderFilled, core.PatternOrderCanceled, core.PatternOrderCompleted:
+	case core.PatternOrderOpen, core.PatternOrderFilled, core.PatternOrderCanceled, core.PatternOrderReplaced, core.PatternOrderCompleted:
 		var order domain.OrderEvent
 		if err := json.Unmarshal(ev.Data, &order); err != nil {
 			return fmt.Errorf("unmarshal order event: %w", err)
 		}
-		return tx.UpdateOrderStatus(ctx, order.OrderId, orderStatus(ev.Pattern), order.FilledQuantity)
+		return tx.UpdateOrderState(ctx, order.Id, orderStatus(ev.Pattern), order.Quantity, order.FilledQuantity)
 	case core.PatternOrderRejected:
 		var rejected domain.OrderRejected
 		if err := json.Unmarshal(ev.Data, &rejected); err != nil {
@@ -178,6 +178,8 @@ func orderStatus(pattern string) string {
 		return "FILLED"
 	case core.PatternOrderCanceled:
 		return "CANCELED"
+	case core.PatternOrderReplaced:
+		return "REPLACED"
 	case core.PatternOrderCompleted:
 		return "COMPLETED"
 	default:

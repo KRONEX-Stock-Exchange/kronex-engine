@@ -38,6 +38,23 @@ const (
 	TRADING_CANCEL
 )
 
+func (t TradingType) MarshalJSON() ([]byte, error) {
+	var value string
+	switch t {
+	case TRADING_BUY:
+		value = "BUY"
+	case TRADING_SELL:
+		value = "SELL"
+	case TRADING_EDIT:
+		value = "EDIT"
+	case TRADING_CANCEL:
+		value = "CANCEL"
+	default:
+		return nil, fmt.Errorf("unknown trading type %d", t)
+	}
+	return json.Marshal(value)
+}
+
 // 큐 메세지의 tradingType 문자열을 TradingType으로 변환
 func (t *TradingType) UnmarshalJSON(data []byte) error {
 	var s string

@@ -57,8 +57,8 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateAccountBalanceStmt, err = db.PrepareContext(ctx, updateAccountBalance); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateAccountBalance: %w", err)
 	}
-	if q.updateOrderStatusStmt, err = db.PrepareContext(ctx, updateOrderStatus); err != nil {
-		return nil, fmt.Errorf("error preparing query UpdateOrderStatus: %w", err)
+	if q.updateOrderStateStmt, err = db.PrepareContext(ctx, updateOrderState); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateOrderState: %w", err)
 	}
 	if q.updateStockPriceStmt, err = db.PrepareContext(ctx, updateStockPrice); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateStockPrice: %w", err)
@@ -129,9 +129,9 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updateAccountBalanceStmt: %w", cerr)
 		}
 	}
-	if q.updateOrderStatusStmt != nil {
-		if cerr := q.updateOrderStatusStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing updateOrderStatusStmt: %w", cerr)
+	if q.updateOrderStateStmt != nil {
+		if cerr := q.updateOrderStateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateOrderStateStmt: %w", cerr)
 		}
 	}
 	if q.updateStockPriceStmt != nil {
@@ -199,7 +199,7 @@ type Queries struct {
 	saveSnapshotStmt          *sql.Stmt
 	saveTradeStmt             *sql.Stmt
 	updateAccountBalanceStmt  *sql.Stmt
-	updateOrderStatusStmt     *sql.Stmt
+	updateOrderStateStmt      *sql.Stmt
 	updateStockPriceStmt      *sql.Stmt
 	updateStockStatusStmt     *sql.Stmt
 	upsertHoldingStmt         *sql.Stmt
@@ -220,7 +220,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		saveSnapshotStmt:          q.saveSnapshotStmt,
 		saveTradeStmt:             q.saveTradeStmt,
 		updateAccountBalanceStmt:  q.updateAccountBalanceStmt,
-		updateOrderStatusStmt:     q.updateOrderStatusStmt,
+		updateOrderStateStmt:      q.updateOrderStateStmt,
 		updateStockPriceStmt:      q.updateStockPriceStmt,
 		updateStockStatusStmt:     q.updateStockStatusStmt,
 		upsertHoldingStmt:         q.upsertHoldingStmt,
