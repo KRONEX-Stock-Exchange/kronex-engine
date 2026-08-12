@@ -1,6 +1,6 @@
 -- name: UpdateOrderState :exec
 UPDATE orders
-SET status = ?, quantity = ?, filled_quantity = ?
+SET status = ?, quantity = ?, filled_quantity = ?, fully_filled_at = ?
 WHERE id = ?;
 
 -- name: RejectOrder :exec

@@ -2,6 +2,7 @@ package publisher
 
 import (
 	"context"
+	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
@@ -18,7 +19,7 @@ type EventPublisherStore interface {
 
 type Tx interface {
 	SaveTrade(ctx context.Context, trade domain.Trade) error
-	UpdateOrderState(ctx context.Context, orderID int64, status string, quantity, filledQty uint64) error
+	UpdateOrderState(ctx context.Context, orderID int64, status string, quantity, filledQty uint64, fullyFilledAt *time.Time) error
 	RejectOrder(ctx context.Context, orderID int64, reason string) error
 	UpdateAccountBalance(ctx context.Context, accountID int32, balance, availableBalance uint64) error
 	ActivateAccount(ctx context.Context, accountID int32) error

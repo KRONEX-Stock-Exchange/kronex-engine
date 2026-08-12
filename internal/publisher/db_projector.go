@@ -142,7 +142,7 @@ func applyEvent(ctx context.Context, tx Tx, ev core.OutputEvent) error {
 		if err := json.Unmarshal(ev.Data, &order); err != nil {
 			return fmt.Errorf("unmarshal order event: %w", err)
 		}
-		return tx.UpdateOrderState(ctx, order.Id, orderStatus(ev.Pattern), order.Quantity, order.FilledQuantity)
+		return tx.UpdateOrderState(ctx, order.Id, orderStatus(ev.Pattern), order.Quantity, order.FilledQuantity, order.FullyFilledAt)
 	case core.PatternOrderRejected:
 		var rejected domain.OrderRejected
 		if err := json.Unmarshal(ev.Data, &rejected); err != nil {

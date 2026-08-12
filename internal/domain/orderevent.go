@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // Output WAL에 들어갈 주문 처리 이벤트 형식
 type OrderEvent struct {
 	Id             int64       `json:"id,string"`
@@ -11,6 +13,7 @@ type OrderEvent struct {
 	OrderType      OrderType   `json:"orderType"`
 	Quantity       uint64      `json:"quantity,string"`
 	FilledQuantity uint64      `json:"filledQuantity,string"`
+	FullyFilledAt  *time.Time  `json:"fullyFilledAt,omitempty"` // 전량 체결 시각 (전량 체결이 아니면 nil)
 }
 
 // 유효성 검사 실패로 거부된 주문 이벤트

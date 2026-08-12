@@ -446,6 +446,7 @@ type Order struct {
 	RejectReason   NullOrdersRejectReason `json:"reject_reason"`
 	TradingType    OrdersTradingType      `json:"trading_type"`
 	PublishedAt    sql.NullTime           `json:"published_at"`
+	FullyFilledAt  sql.NullTime           `json:"fully_filled_at"`
 	CreatedAt      time.Time              `json:"created_at"`
 }
 

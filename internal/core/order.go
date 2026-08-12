@@ -223,6 +223,10 @@ func (e *Engine) matchEvents(order domain.Order) ([]outEvent, error) {
 		}
 		makerEvent := orderEvent(counter)
 		makerEvent.FilledQuantity = makerFilled
+		if makerPattern == PatternOrderFilled {
+			now := time.Now().UTC()
+			makerEvent.FullyFilledAt = &now
+		}
 		events = append(events, outEvent{makerPattern, makerEvent})
 
 		// Maker 잔고
@@ -276,7 +280,13 @@ func (e *Engine) matchEvents(order domain.Order) ([]outEvent, error) {
 	}
 
 	// 내 주문(taker) 최종 상태
-	events = append(events, outEvent{orderStatusPattern(order), orderEvent(order)})
+	takerPattern := orderStatusPattern(order)
+	takerEvent := orderEvent(order)
+	if takerPattern == PatternOrderFilled {
+		now := time.Now().UTC()
+		takerEvent.FullyFilledAt = &now
+	}
+	events = append(events, outEvent{takerPattern, takerEvent})
 
 	// 영향 받은 호가 최종 상태
 	if len(affectedLevels) > 0 {

@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/core"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
@@ -23,14 +24,15 @@ type orderStatusRecordingTx struct {
 }
 
 type orderStatusUpdate struct {
-	orderID   int64
-	status    string
-	quantity  uint64
-	filledQty uint64
+	orderID       int64
+	status        string
+	quantity      uint64
+	filledQty     uint64
+	fullyFilledAt *time.Time
 }
 
-func (t *orderStatusRecordingTx) UpdateOrderState(_ context.Context, orderID int64, status string, quantity, filledQty uint64) error {
-	t.updates = append(t.updates, orderStatusUpdate{orderID, status, quantity, filledQty})
+func (t *orderStatusRecordingTx) UpdateOrderState(_ context.Context, orderID int64, status string, quantity, filledQty uint64, fullyFilledAt *time.Time) error {
+	t.updates = append(t.updates, orderStatusUpdate{orderID, status, quantity, filledQty, fullyFilledAt})
 	return nil
 }
 

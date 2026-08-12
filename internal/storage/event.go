@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/publisher"
@@ -107,11 +108,16 @@ func (t *eventTx) SaveTrade(ctx context.Context, tr domain.Trade) error {
 }
 
 // 주문 상태/수량/체결수량 갱신
-func (t *eventTx) UpdateOrderState(ctx context.Context, orderID int64, status string, quantity, filledQty uint64) error {
+func (t *eventTx) UpdateOrderState(ctx context.Context, orderID int64, status string, quantity, filledQty uint64, fullyFilledAt *time.Time) error {
+	var nullFullyFilledAt sql.NullTime
+	if fullyFilledAt != nil {
+		nullFullyFilledAt = sql.NullTime{Time: *fullyFilledAt, Valid: true}
+	}
 	if err := t.q.UpdateOrderState(ctx, sqlc.UpdateOrderStateParams{
 		Status:         sqlc.OrdersStatus(status),
 		Quantity:       quantity,
 		FilledQuantity: filledQty,
+		FullyFilledAt:  nullFullyFilledAt,
 		ID:             orderID,
 	}); err != nil {
 		return fmt.Errorf("update order %d state: %w", orderID, err)

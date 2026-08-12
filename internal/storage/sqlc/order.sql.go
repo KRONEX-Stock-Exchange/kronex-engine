@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
 
 const rejectOrder = `-- name: RejectOrder :exec
@@ -27,7 +28,7 @@ func (q *Queries) RejectOrder(ctx context.Context, arg RejectOrderParams) error 
 
 const updateOrderState = `-- name: UpdateOrderState :exec
 UPDATE orders
-SET status = ?, quantity = ?, filled_quantity = ?
+SET status = ?, quantity = ?, filled_quantity = ?, fully_filled_at = ?
 WHERE id = ?
 `
 
@@ -35,6 +36,7 @@ type UpdateOrderStateParams struct {
 	Status         OrdersStatus `json:"status"`
 	Quantity       uint64       `json:"quantity"`
 	FilledQuantity uint64       `json:"filled_quantity"`
+	FullyFilledAt  sql.NullTime `json:"fully_filled_at"`
 	ID             int64        `json:"id"`
 }
 
@@ -43,6 +45,7 @@ func (q *Queries) UpdateOrderState(ctx context.Context, arg UpdateOrderStatePara
 		arg.Status,
 		arg.Quantity,
 		arg.FilledQuantity,
+		arg.FullyFilledAt,
 		arg.ID,
 	)
 	return err
