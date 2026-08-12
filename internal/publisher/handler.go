@@ -14,11 +14,11 @@ type Handler struct {
 	signal     <-chan struct{}
 	db         DBProjectorStore
 	events     EventPublisherStore
-	mq         core.Publisher
+	mq         core.BatchPublisher
 	eventQueue string
 }
 
-func NewHandler(output *wal.WAL, signal <-chan struct{}, db DBProjectorStore, events EventPublisherStore, mq core.Publisher, eventQueue string) *Handler {
+func NewHandler(output *wal.WAL, signal <-chan struct{}, db DBProjectorStore, events EventPublisherStore, mq core.BatchPublisher, eventQueue string) *Handler {
 	return &Handler{
 		output:     output,
 		signal:     signal,

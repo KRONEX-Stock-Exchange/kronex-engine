@@ -11,6 +11,10 @@ type Publisher interface {
 	Publish(ctx context.Context, msg domain.Message) error
 }
 
+type BatchPublisher interface {
+	PublishBatch(ctx context.Context, msgs []domain.Message) error
+}
+
 type Consumer interface {
 	Deliveries(ctx context.Context, queue string) (<-chan Delivery, error)
 }

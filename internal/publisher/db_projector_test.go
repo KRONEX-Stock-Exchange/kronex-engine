@@ -68,15 +68,12 @@ func TestDBProjectorAppliesCanceledAndCompletedInOneTransaction(t *testing.T) {
 		orderStatusOutputEvent(t, core.PatternOrderCanceled, domain.OrderEvent{Id: 10, Quantity: 10, FilledQuantity: 3}),
 		orderStatusOutputEvent(t, core.PatternOrderCompleted, domain.OrderEvent{Id: 20}),
 	}
-	raw, err := json.Marshal(core.OutputEnvelope{InputSeq: 1, OutputSeq: 1, Events: events})
-	if err != nil {
-		t.Fatalf("marshal output envelope: %v", err)
-	}
+	env := core.OutputEnvelope{InputSeq: 1, OutputSeq: 1, Events: events}
 	tx := &orderStatusRecordingTx{}
 	store := &orderStatusRecordingStore{tx: tx}
 	projector := &DBProjector{store: store}
 
-	if _, _, _, err := projector.apply(context.Background(), 7, raw); err != nil {
+	if err := projector.applyBatch(context.Background(), 7, []core.OutputEnvelope{env}); err != nil {
 		t.Fatalf("apply output envelope: %v", err)
 	}
 
@@ -111,15 +108,12 @@ func TestDBProjectorAppliesReplacedAndOpenInOneTransaction(t *testing.T) {
 		orderStatusOutputEvent(t, core.PatternOrderReplaced, domain.OrderEvent{Id: 10, Quantity: 10, FilledQuantity: 4}),
 		orderStatusOutputEvent(t, core.PatternOrderOpen, domain.OrderEvent{Id: 20, Quantity: 10, FilledQuantity: 4}),
 	}
-	raw, err := json.Marshal(core.OutputEnvelope{InputSeq: 1, OutputSeq: 1, Events: events})
-	if err != nil {
-		t.Fatalf("marshal output envelope: %v", err)
-	}
+	env := core.OutputEnvelope{InputSeq: 1, OutputSeq: 1, Events: events}
 	tx := &orderStatusRecordingTx{}
 	store := &orderStatusRecordingStore{tx: tx}
 	projector := &DBProjector{store: store}
 
-	if _, _, _, err := projector.apply(context.Background(), 8, raw); err != nil {
+	if err := projector.applyBatch(context.Background(), 8, []core.OutputEnvelope{env}); err != nil {
 		t.Fatalf("apply output envelope: %v", err)
 	}
 
