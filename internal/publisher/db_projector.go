@@ -15,6 +15,7 @@ import (
 )
 
 const dbProjectorBackstopInterval = time.Second
+const dbProjectorBatchSize = 100
 
 type DBProjector struct {
 	output     *wal.WAL
@@ -61,53 +62,71 @@ func (p *DBProjector) drain(ctx context.Context) error {
 		return fmt.Errorf("output last index: %w", err)
 	}
 	for p.cursor < last {
-		next := p.cursor + 1
-		raw, err := p.output.Read(next)
-		if err != nil {
-			return fmt.Errorf("read output %d: %w", next, err)
-		}
-		env, started, dbApply, err := p.apply(ctx, next, raw)
-		if err != nil {
-			return fmt.Errorf("apply output %d: %w", next, err)
-		}
-		p.cursor = next
-		p.appliedSeq.Store(next)
-		walWait := time.Duration(0)
-		if !env.CreatedAt.IsZero() {
-			walWait = started.Sub(env.CreatedAt)
-			if walWait < 0 {
-				walWait = 0
+		batchEnd := min(p.cursor+dbProjectorBatchSize, last)
+
+		envs := make([]core.OutputEnvelope, 0, batchEnd-p.cursor)
+		for next := p.cursor + 1; next <= batchEnd; next++ {
+			raw, err := p.output.Read(next)
+			if err != nil {
+				return fmt.Errorf("read output %d: %w", next, err)
 			}
+			var env core.OutputEnvelope
+			if err := json.Unmarshal(raw, &env); err != nil {
+				return fmt.Errorf("unmarshal output envelope %d: %w", next, err)
+			}
+			envs = append(envs, env)
 		}
-		p.metrics.Record(metrics.DBProjectorRecord{EventCount: len(env.Events), WALWait: walWait, DBApply: dbApply})
+
+		started := time.Now()
+		if err := p.applyBatch(ctx, batchEnd, envs); err != nil {
+			return fmt.Errorf("apply batch output %d-%d: %w", p.cursor+1, batchEnd, err)
+		}
+		dbApply := time.Since(started)
+		p.cursor = batchEnd
+		p.appliedSeq.Store(batchEnd)
+
+		p.recordBatch(envs, started, dbApply)
 	}
 	return nil
 }
 
-func (p *DBProjector) apply(ctx context.Context, index uint64, raw []byte) (core.OutputEnvelope, time.Time, time.Duration, error) {
-	var env core.OutputEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return core.OutputEnvelope{}, time.Time{}, 0, fmt.Errorf("unmarshal output envelope: %w", err)
-	}
-
-	started := time.Now()
+// envs 전체를 트랜잭션 하나로 묶어 적용하고, 커서도 배치당 1번만 저장한다
+func (p *DBProjector) applyBatch(ctx context.Context, index uint64, envs []core.OutputEnvelope) error {
 	tx, err := p.store.Begin(ctx)
 	if err != nil {
-		return core.OutputEnvelope{}, started, time.Since(started), fmt.Errorf("begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	for i := range env.Events {
-		if err := applyEvent(ctx, tx, env.Events[i]); err != nil {
-			return core.OutputEnvelope{}, started, time.Since(started), err
+
+	for _, env := range envs {
+		for i := range env.Events {
+			if err := applyEvent(ctx, tx, env.Events[i]); err != nil {
+				return err
+			}
 		}
 	}
 	if err := tx.SaveDBAppliedCursor(ctx, index); err != nil {
-		return core.OutputEnvelope{}, started, time.Since(started), err
+		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return core.OutputEnvelope{}, started, time.Since(started), fmt.Errorf("commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
-	return env, started, time.Since(started), nil
+	return nil
+}
+
+// 배치 내 가장 오래된(첫) envelope 기준으로 지표를 기록한다 (가장 오래 기다린 항목이 tail latency를 대표함)
+func (p *DBProjector) recordBatch(envs []core.OutputEnvelope, started time.Time, dbApply time.Duration) {
+	events := 0
+	for _, env := range envs {
+		events += len(env.Events)
+	}
+
+	walWait := time.Duration(0)
+	if len(envs) > 0 && !envs[0].CreatedAt.IsZero() {
+		walWait = max(started.Sub(envs[0].CreatedAt), 0)
+	}
+
+	p.metrics.Record(metrics.DBProjectorRecord{EventCount: events, WALWait: walWait, DBApply: dbApply})
 }
 
 func applyEvent(ctx context.Context, tx Tx, ev core.OutputEvent) error {
