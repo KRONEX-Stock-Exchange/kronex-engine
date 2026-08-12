@@ -12,6 +12,19 @@ const (
 	ORDER_MARKET
 )
 
+func (t OrderType) MarshalJSON() ([]byte, error) {
+	var value string
+	switch t {
+	case ORDER_LIMIT:
+		value = "LIMIT"
+	case ORDER_MARKET:
+		value = "MARKET"
+	default:
+		return nil, fmt.Errorf("unknown order type %d", t)
+	}
+	return json.Marshal(value)
+}
+
 // 큐 메세지의 orderType 문자열을 OrderType으로 변환
 func (t *OrderType) UnmarshalJSON(data []byte) error {
 	var s string

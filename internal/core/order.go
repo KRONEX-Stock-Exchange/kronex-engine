@@ -457,6 +457,7 @@ func orderEvent(order domain.Order) domain.OrderEvent {
 		StockId:        order.StockId,
 		Price:          order.Price,
 		TradingType:    order.TradingType,
+		OrderType:      order.OrderType,
 		Quantity:       order.Quantity,
 		FilledQuantity: order.FilledQuantity,
 	}

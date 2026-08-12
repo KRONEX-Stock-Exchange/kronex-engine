@@ -8,6 +8,7 @@ type OrderEvent struct {
 	StockId        int32       `json:"stockId,string"`
 	Price          uint64      `json:"price,string"`
 	TradingType    TradingType `json:"tradingType"`
+	OrderType      OrderType   `json:"orderType"`
 	Quantity       uint64      `json:"quantity,string"`
 	FilledQuantity uint64      `json:"filledQuantity,string"`
 }
