@@ -470,6 +470,7 @@ func orderEvent(order domain.Order) domain.OrderEvent {
 		OrderType:      order.OrderType,
 		Quantity:       order.Quantity,
 		FilledQuantity: order.FilledQuantity,
+		CreatedAt:      order.CreatedAt,
 	}
 }
 

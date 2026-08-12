@@ -13,6 +13,7 @@ type OrderEvent struct {
 	OrderType      OrderType   `json:"orderType"`
 	Quantity       uint64      `json:"quantity,string"`
 	FilledQuantity uint64      `json:"filledQuantity,string"`
+	CreatedAt      time.Time   `json:"createdAt"`
 	FullyFilledAt  *time.Time  `json:"fullyFilledAt,omitempty"` // 전량 체결 시각 (전량 체결이 아니면 nil)
 }
 

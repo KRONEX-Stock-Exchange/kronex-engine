@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type OrderType uint8
@@ -99,4 +100,5 @@ type Order struct {
 	FilledQuantity uint64      `json:"filledQuantity,string"`
 	OrderType      OrderType   `json:"orderType"`
 	TradingType    TradingType `json:"tradingType"`
+	CreatedAt      time.Time   `json:"createdAt"`
 }
