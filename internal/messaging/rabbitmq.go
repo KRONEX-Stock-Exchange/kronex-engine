@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	_ core.Publisher = (*Connection)(nil)
-	_ core.Consumer  = (*Connection)(nil)
+	_ core.Publisher      = (*Connection)(nil)
+	_ core.BatchPublisher = (*Connection)(nil)
+	_ core.Consumer       = (*Connection)(nil)
 )
 
 type Connection struct {
@@ -77,6 +78,36 @@ func (c *Connection) Publish(ctx context.Context, msg domain.Message) error {
 	}
 	if !acked {
 		return fmt.Errorf("publish to %q nacked by broker", msg.RoutingKey)
+	}
+
+	return nil
+}
+
+// NOTE: 배치 처리 후 확인시에 실패가 확인되면 애러를 반환한다. 이때 이미 발행한 큐는 회수 되지 않음
+func (c *Connection) PublishBatch(ctx context.Context, msgs []domain.Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	confirms := make([]*amqp.DeferredConfirmation, len(msgs))
+	for i, msg := range msgs {
+		conf, err := c.publishCh.PublishWithDeferredConfirmWithContext(ctx, "", msg.RoutingKey, false, false, amqp.Publishing{
+			Body: msg.Payload,
+		})
+		if err != nil {
+			return fmt.Errorf("publish to %q: %w", msg.RoutingKey, err)
+		}
+		confirms[i] = conf
+	}
+
+	for i, conf := range confirms {
+		acked, err := conf.WaitContext(ctx)
+		if err != nil {
+			return fmt.Errorf("await confirm %q: %w", msgs[i].RoutingKey, err)
+		}
+		if !acked {
+			return fmt.Errorf("publish to %q nacked by broker", msgs[i].RoutingKey)
+		}
 	}
 
 	return nil
