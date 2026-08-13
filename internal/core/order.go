@@ -460,6 +460,11 @@ func (e *Engine) cancel(order domain.Order) error {
 
 // 주문 이벤트 형태 변환용
 func orderEvent(order domain.Order) domain.OrderEvent {
+	var createdAt *time.Time
+	if !order.CreatedAt.IsZero() {
+		createdAt = &order.CreatedAt
+	}
+
 	return domain.OrderEvent{
 		Id:             order.Id,
 		TargetId:       order.TargetId,
@@ -470,7 +475,7 @@ func orderEvent(order domain.Order) domain.OrderEvent {
 		OrderType:      order.OrderType,
 		Quantity:       order.Quantity,
 		FilledQuantity: order.FilledQuantity,
-		CreatedAt:      order.CreatedAt,
+		CreatedAt:      createdAt,
 	}
 }
 
