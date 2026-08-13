@@ -14,7 +14,7 @@ type OrderEvent struct {
 	Quantity       uint64      `json:"quantity,string"`
 	FilledQuantity uint64      `json:"filledQuantity,string"`
 	CreatedAt      *time.Time  `json:"createdAt"` // 옛날 주문은 값이 없을 수 있어 null 허용
-	FullyFilledAt  *time.Time  `json:"fullyFilledAt,omitempty"` // 전량 체결 시각 (전량 체결이 아니면 nil)
+	FullyFilledAt  *time.Time  `json:"fullyFilledAt"` // 전량 체결 시각 (전량 체결이 아니면 null)
 }
 
 // 유효성 검사 실패로 거부된 주문 이벤트
