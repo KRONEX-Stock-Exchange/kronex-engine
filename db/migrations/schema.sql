@@ -114,6 +114,7 @@ CREATE TABLE `orders` (
   `status`          ENUM('RECEIVED', 'OPEN', 'FILLED', 'CANCELED', 'REPLACED', 'REJECTED', 'COMPLETED') NOT NULL DEFAULT 'RECEIVED',
   `reject_reason`   ENUM('INVALID_ORDER', 'INSUFFICIENT_BALANCE', 'INSUFFICIENT_STOCK', 'PRICE_OUT_OF_LIMIT', 'STOCK_NOT_TRADABLE', 'ORDER_NOT_ACTIVE') NULL,
   `trading_type`    ENUM('BUY', 'SELL', 'EDIT', 'CANCEL') NOT NULL,
+  `cancel_reason`   ENUM('USER', 'SYSTEM') NULL,
   `published_at`    DATETIME(3)     NULL,
   `fully_filled_at` DATETIME(3)     NULL,
   `created_at`      DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

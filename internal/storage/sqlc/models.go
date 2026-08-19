@@ -141,6 +141,48 @@ func (ns NullCursorsType) Value() (driver.Value, error) {
 	return string(ns.CursorsType), nil
 }
 
+type OrdersCancelReason string
+
+const (
+	OrdersCancelReasonUSER   OrdersCancelReason = "USER"
+	OrdersCancelReasonSYSTEM OrdersCancelReason = "SYSTEM"
+)
+
+func (e *OrdersCancelReason) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = OrdersCancelReason(s)
+	case string:
+		*e = OrdersCancelReason(s)
+	default:
+		return fmt.Errorf("unsupported scan type for OrdersCancelReason: %T", src)
+	}
+	return nil
+}
+
+type NullOrdersCancelReason struct {
+	OrdersCancelReason OrdersCancelReason `json:"orders_cancel_reason"`
+	Valid              bool               `json:"valid"` // Valid is true if OrdersCancelReason is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullOrdersCancelReason) Scan(value interface{}) error {
+	if value == nil {
+		ns.OrdersCancelReason, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.OrdersCancelReason.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullOrdersCancelReason) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.OrdersCancelReason), nil
+}
+
 type OrdersOrderType string
 
 const (
@@ -445,6 +487,7 @@ type Order struct {
 	Status         OrdersStatus           `json:"status"`
 	RejectReason   NullOrdersRejectReason `json:"reject_reason"`
 	TradingType    OrdersTradingType      `json:"trading_type"`
+	CancelReason   NullOrdersCancelReason `json:"cancel_reason"`
 	PublishedAt    sql.NullTime           `json:"published_at"`
 	FullyFilledAt  sql.NullTime           `json:"fully_filled_at"`
 	CreatedAt      time.Time              `json:"created_at"`
