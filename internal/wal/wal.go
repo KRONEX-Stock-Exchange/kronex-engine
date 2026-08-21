@@ -8,7 +8,10 @@ import (
 	twal "github.com/tidwall/wal"
 )
 
-var ErrNotFound = twal.ErrNotFound
+var (
+	ErrNotFound   = twal.ErrNotFound
+	ErrOutOfRange = twal.ErrOutOfRange
+)
 
 type Options = twal.Options
 
@@ -101,7 +104,7 @@ func (w *WAL) LastIndex() (uint64, error) {
 	return idx, nil
 }
 
-func (w *WAL) Checkpoint(index uint64) error {
+func (w *WAL) TruncateFront(index uint64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
