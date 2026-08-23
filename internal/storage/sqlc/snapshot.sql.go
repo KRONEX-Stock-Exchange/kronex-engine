@@ -28,6 +28,34 @@ func (q *Queries) LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	return i, err
 }
 
+const oldestSnapshotWalIndex = `-- name: OldestSnapshotWalIndex :one
+SELECT input_wal_index
+FROM snapshots
+ORDER BY id ASC
+LIMIT 1
+`
+
+func (q *Queries) OldestSnapshotWalIndex(ctx context.Context) (uint64, error) {
+	row := q.queryRow(ctx, q.oldestSnapshotWalIndexStmt, oldestSnapshotWalIndex)
+	var input_wal_index uint64
+	err := row.Scan(&input_wal_index)
+	return input_wal_index, err
+}
+
+const pruneSnapshots = `-- name: PruneSnapshots :exec
+DELETE FROM snapshots
+WHERE id NOT IN (
+  SELECT id FROM (
+    SELECT id FROM snapshots ORDER BY id DESC LIMIT ?
+  ) AS keep
+)
+`
+
+func (q *Queries) PruneSnapshots(ctx context.Context, limit int32) error {
+	_, err := q.exec(ctx, q.pruneSnapshotsStmt, pruneSnapshots, limit)
+	return err
+}
+
 const saveSnapshot = `-- name: SaveSnapshot :exec
 INSERT INTO snapshots (state, input_wal_index)
 VALUES (?, ?)

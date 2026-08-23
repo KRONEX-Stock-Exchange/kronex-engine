@@ -39,6 +39,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.loadMQPublishedCursorStmt, err = db.PrepareContext(ctx, loadMQPublishedCursor); err != nil {
 		return nil, fmt.Errorf("error preparing query LoadMQPublishedCursor: %w", err)
 	}
+	if q.oldestSnapshotWalIndexStmt, err = db.PrepareContext(ctx, oldestSnapshotWalIndex); err != nil {
+		return nil, fmt.Errorf("error preparing query OldestSnapshotWalIndex: %w", err)
+	}
+	if q.pruneSnapshotsStmt, err = db.PrepareContext(ctx, pruneSnapshots); err != nil {
+		return nil, fmt.Errorf("error preparing query PruneSnapshots: %w", err)
+	}
 	if q.rejectOrderStmt, err = db.PrepareContext(ctx, rejectOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query RejectOrder: %w", err)
 	}
@@ -97,6 +103,16 @@ func (q *Queries) Close() error {
 	if q.loadMQPublishedCursorStmt != nil {
 		if cerr := q.loadMQPublishedCursorStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing loadMQPublishedCursorStmt: %w", cerr)
+		}
+	}
+	if q.oldestSnapshotWalIndexStmt != nil {
+		if cerr := q.oldestSnapshotWalIndexStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing oldestSnapshotWalIndexStmt: %w", cerr)
+		}
+	}
+	if q.pruneSnapshotsStmt != nil {
+		if cerr := q.pruneSnapshotsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing pruneSnapshotsStmt: %w", cerr)
 		}
 	}
 	if q.rejectOrderStmt != nil {
@@ -186,43 +202,47 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                        DBTX
-	tx                        *sql.Tx
-	activateAccountStmt       *sql.Stmt
-	deleteHoldingStmt         *sql.Stmt
-	latestSnapshotStmt        *sql.Stmt
-	loadDBAppliedCursorStmt   *sql.Stmt
-	loadMQPublishedCursorStmt *sql.Stmt
-	rejectOrderStmt           *sql.Stmt
-	saveDBAppliedCursorStmt   *sql.Stmt
-	saveMQPublishedCursorStmt *sql.Stmt
-	saveSnapshotStmt          *sql.Stmt
-	saveTradeStmt             *sql.Stmt
-	updateAccountBalanceStmt  *sql.Stmt
-	updateOrderStateStmt      *sql.Stmt
-	updateStockPriceStmt      *sql.Stmt
-	updateStockStatusStmt     *sql.Stmt
-	upsertHoldingStmt         *sql.Stmt
+	db                         DBTX
+	tx                         *sql.Tx
+	activateAccountStmt        *sql.Stmt
+	deleteHoldingStmt          *sql.Stmt
+	latestSnapshotStmt         *sql.Stmt
+	loadDBAppliedCursorStmt    *sql.Stmt
+	loadMQPublishedCursorStmt  *sql.Stmt
+	oldestSnapshotWalIndexStmt *sql.Stmt
+	pruneSnapshotsStmt         *sql.Stmt
+	rejectOrderStmt            *sql.Stmt
+	saveDBAppliedCursorStmt    *sql.Stmt
+	saveMQPublishedCursorStmt  *sql.Stmt
+	saveSnapshotStmt           *sql.Stmt
+	saveTradeStmt              *sql.Stmt
+	updateAccountBalanceStmt   *sql.Stmt
+	updateOrderStateStmt       *sql.Stmt
+	updateStockPriceStmt       *sql.Stmt
+	updateStockStatusStmt      *sql.Stmt
+	upsertHoldingStmt          *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                        tx,
-		tx:                        tx,
-		activateAccountStmt:       q.activateAccountStmt,
-		deleteHoldingStmt:         q.deleteHoldingStmt,
-		latestSnapshotStmt:        q.latestSnapshotStmt,
-		loadDBAppliedCursorStmt:   q.loadDBAppliedCursorStmt,
-		loadMQPublishedCursorStmt: q.loadMQPublishedCursorStmt,
-		rejectOrderStmt:           q.rejectOrderStmt,
-		saveDBAppliedCursorStmt:   q.saveDBAppliedCursorStmt,
-		saveMQPublishedCursorStmt: q.saveMQPublishedCursorStmt,
-		saveSnapshotStmt:          q.saveSnapshotStmt,
-		saveTradeStmt:             q.saveTradeStmt,
-		updateAccountBalanceStmt:  q.updateAccountBalanceStmt,
-		updateOrderStateStmt:      q.updateOrderStateStmt,
-		updateStockPriceStmt:      q.updateStockPriceStmt,
-		updateStockStatusStmt:     q.updateStockStatusStmt,
-		upsertHoldingStmt:         q.upsertHoldingStmt,
+		db:                         tx,
+		tx:                         tx,
+		activateAccountStmt:        q.activateAccountStmt,
+		deleteHoldingStmt:          q.deleteHoldingStmt,
+		latestSnapshotStmt:         q.latestSnapshotStmt,
+		loadDBAppliedCursorStmt:    q.loadDBAppliedCursorStmt,
+		loadMQPublishedCursorStmt:  q.loadMQPublishedCursorStmt,
+		oldestSnapshotWalIndexStmt: q.oldestSnapshotWalIndexStmt,
+		pruneSnapshotsStmt:         q.pruneSnapshotsStmt,
+		rejectOrderStmt:            q.rejectOrderStmt,
+		saveDBAppliedCursorStmt:    q.saveDBAppliedCursorStmt,
+		saveMQPublishedCursorStmt:  q.saveMQPublishedCursorStmt,
+		saveSnapshotStmt:           q.saveSnapshotStmt,
+		saveTradeStmt:              q.saveTradeStmt,
+		updateAccountBalanceStmt:   q.updateAccountBalanceStmt,
+		updateOrderStateStmt:       q.updateOrderStateStmt,
+		updateStockPriceStmt:       q.updateStockPriceStmt,
+		updateStockStatusStmt:      q.updateStockStatusStmt,
+		upsertHoldingStmt:          q.upsertHoldingStmt,
 	}
 }

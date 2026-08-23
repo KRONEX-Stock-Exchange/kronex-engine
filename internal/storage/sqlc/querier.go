@@ -14,6 +14,8 @@ type Querier interface {
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	LoadDBAppliedCursor(ctx context.Context) (int64, error)
 	LoadMQPublishedCursor(ctx context.Context) (int64, error)
+	OldestSnapshotWalIndex(ctx context.Context) (uint64, error)
+	PruneSnapshots(ctx context.Context, limit int32) error
 	RejectOrder(ctx context.Context, arg RejectOrderParams) error
 	SaveDBAppliedCursor(ctx context.Context, index int64) error
 	SaveMQPublishedCursor(ctx context.Context, index int64) error

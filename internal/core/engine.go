@@ -43,6 +43,7 @@ const (
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
 const snapshotInterval = 5 * time.Minute // 상태 스냅샷 주기
+const snapshotRetention = 15             // 유지할 최신 스냅샷 개수 (Input WAL 정리 기준)
 
 type snapshotData struct {
 	state    []byte
@@ -282,9 +283,17 @@ func (e *Engine) initializeTradeID(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("output last index: %w", err)
 	}
+	first, err := e.output.FirstIndex()
+	if err != nil {
+		return fmt.Errorf("output first index: %w", err)
+	}
 
-	// Trade.executed를 찾을 때까지 역방향 탐색
-	for i := last; i > 0; i-- {
+	// NOTE: Trade.executed를 찾을 때까지 역방향 탐색 한다.
+	// Output WAL 앞부분이 정리되어 마지막 TradeId를 찾을 수 없는 경우에 DB에서 마지막 TradeID를 조회 한다.
+	// Output WAL은 항상 DB_APPLIED_OUTPUT_SEQ 이하 인덱스만 정리됨으로 중복 없이 마지막 TradeID를 가져올 수 있다.
+	// 이때 Output WAL이 생성되고 아직 DB에 반영되지 않은 경우의 수도 있기 때문에 반듯이 역방향 탐색을
+	// 먼저한뒤 없을 경우에만 DB 풀백을 해야한다. 그렇지 않으면 TradeID를 중복으로 사용할 수도 있다.
+	for i := last; i >= first && i > 0; i-- {
 		raw, err := e.output.Read(i)
 		if err != nil {
 			return fmt.Errorf("read output %d: %w", i, err)
@@ -344,6 +353,29 @@ func (e *Engine) Run(ctx context.Context) error {
 		return fmt.Errorf("replay: %w", err)
 	}
 	log.Printf("replay: success")
+
+	log.Printf("wal cleanup: start")
+	// WAL 정리(Input: 스냅샷 15개 유지 기준, Output: 발행/DB반영 커서 기준).
+	if e.store != nil {
+		floor, hasAny, err := e.store.PruneSnapshots(ctx, snapshotRetention)
+		if err != nil {
+			log.Printf("engine: boot prune snapshots: %v", err)
+		} else if hasAny {
+			if err := e.cleanupInputWAL(floor); err != nil {
+				log.Printf("engine: %v", err)
+			}
+		}
+	}
+	if err := e.cleanupOutputWAL(ctx); err != nil {
+		log.Printf("engine: boot cleanup output wal: %v", err)
+	}
+	log.Printf("wal cleanup: success")
+
+	// TEMP 프로덕션 확인용
+	inputIndex, _ := e.input.FirstIndex()
+	outputIndex, _ := e.output.FirstIndex()
+	log.Printf("input: %d", inputIndex)
+	log.Printf("output: %d", outputIndex)
 
 	deliveries, err := e.consumeAll(ctx)
 	if err != nil {
@@ -414,7 +446,6 @@ func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
 	return merged, nil
 }
 
-// CONSIDER: 스냅샷 저장시 불필요한 WAL 삭제 로직 필요
 func (e *Engine) snapshot() error {
 	data, err := e.state.Serialize()
 	if err != nil {
@@ -431,7 +462,7 @@ func (e *Engine) snapshot() error {
 	return nil
 }
 
-// 직렬화된 스냅샷 DB 저장
+// 직렬화된 스냅샷 DB 저장 + Input/Output WAL 정리
 func (e *Engine) runSnapshotSaver(ctx context.Context) {
 	if e.store == nil {
 		return
@@ -441,11 +472,64 @@ func (e *Engine) runSnapshotSaver(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case snap := <-e.snapshots:
-			if err := e.store.SaveSnapshot(ctx, snap.state, snap.inputSeq); err != nil {
+			floor, err := e.store.SaveSnapshotAndPrune(ctx, snap.state, snap.inputSeq, snapshotRetention)
+			if err != nil {
 				log.Printf("engine: save snapshot: %v", err)
+				continue
 			}
+			e.cleanupWAL(ctx, floor)
 		}
 	}
+}
+
+// floor 기준 Input WAL 체크포인트 + Output WAL 정리 (스냅샷 저장 시 사용)
+func (e *Engine) cleanupWAL(ctx context.Context, floor uint64) {
+	if err := e.cleanupInputWAL(floor); err != nil {
+		log.Printf("engine: %v", err)
+	}
+	if err := e.cleanupOutputWAL(ctx); err != nil {
+		log.Printf("engine: %v", err)
+	}
+}
+
+// Input WAL 정리
+func (e *Engine) cleanupInputWAL(floor uint64) error {
+	// NOTE: dedupWindow 크기를 넘겨야지만 Input WAL이 삭제된다. (dedup를 복구 해야되기 때문)
+	target := uint64(1)
+	if floor+1 > dedupWindow {
+		target = floor - dedupWindow + 1
+	}
+	if err := e.input.TruncateFront(target); err != nil && !errors.Is(err, wal.ErrOutOfRange) {
+		return fmt.Errorf("checkpoint input wal to %d: %w", target, err)
+	}
+	return nil
+}
+
+// Output WAL 정리
+func (e *Engine) cleanupOutputWAL(ctx context.Context) error {
+	if e.tradeIDs == nil {
+		return nil
+	}
+
+	mqCursor, err := e.tradeIDs.LoadMQPublishedCursor(ctx)
+	if err != nil {
+		return fmt.Errorf("load MQ published cursor: %w", err)
+	}
+	dbCursor, err := e.tradeIDs.LoadDBAppliedCursor(ctx)
+	if err != nil {
+		return fmt.Errorf("load DB applied cursor: %w", err)
+	}
+	floor := min(mqCursor, dbCursor)
+	if floor == 0 {
+		return nil
+	}
+
+	// NOTE: OutputWatermark 복구를 위해서 Output WAL 최소 한개가 필요함.
+	if err := e.output.TruncateFront(floor); err != nil && !errors.Is(err, wal.ErrOutOfRange) {
+		return fmt.Errorf("checkpoint output wal to %d: %w", floor, err)
+	}
+
+	return nil
 }
 
 type envelope struct {
