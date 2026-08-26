@@ -198,6 +198,7 @@ func (e *Engine) Close() error {
 }
 
 // TODO: 유효 하지 않은 주문은 Replay 대상에서 제외하기
+// TODO: Replay시 송금, 체결시간이 재생되는 시간으로 복구되는 문제가 있음
 func (e *Engine) Replay(ctx context.Context) error {
 	// 최신 스냅샷 로드
 	var lastSnapshotIdx uint64
