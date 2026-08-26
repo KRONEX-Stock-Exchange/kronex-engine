@@ -207,6 +207,32 @@ func (t *eventTx) DeleteHolding(ctx context.Context, accountID, stockID int32) e
 	return nil
 }
 
+// 송금 완료 처리 (status = COMPLETED)
+func (t *eventTx) CompleteTransfer(ctx context.Context, transferID int64, completedAt time.Time) error {
+	if err := t.q.CompleteTransfer(ctx, sqlc.CompleteTransferParams{
+		CompletedAt: sql.NullTime{Time: completedAt, Valid: true},
+		ID:          transferID,
+	}); err != nil {
+		return fmt.Errorf("complete transfer %d: %w", transferID, err)
+	}
+	return nil
+}
+
+// 송금 거부 처리 (status = REJECTED)
+func (t *eventTx) RejectTransfer(ctx context.Context, transferID int64, reason string, completedAt time.Time) error {
+	if err := t.q.RejectTransfer(ctx, sqlc.RejectTransferParams{
+		RejectReason: sqlc.NullTransfersRejectReason{
+			TransfersRejectReason: sqlc.TransfersRejectReason(reason),
+			Valid:                 true,
+		},
+		CompletedAt: sql.NullTime{Time: completedAt, Valid: true},
+		ID:          transferID,
+	}); err != nil {
+		return fmt.Errorf("reject transfer %d: %w", transferID, err)
+	}
+	return nil
+}
+
 func (t *eventTx) Commit() error {
 	return t.tx.Commit()
 }

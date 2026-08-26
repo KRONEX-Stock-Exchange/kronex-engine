@@ -183,6 +183,18 @@ func applyEvent(ctx context.Context, tx Tx, ev core.OutputEvent) error {
 			return fmt.Errorf("unmarshal stock: %w", err)
 		}
 		return tx.UpdateStockPrice(ctx, stock.Id, stock.Price)
+	case core.PatternTransferCompleted:
+		var transfer domain.TransferCompleted
+		if err := json.Unmarshal(ev.Data, &transfer); err != nil {
+			return fmt.Errorf("unmarshal transfer completed: %w", err)
+		}
+		return tx.CompleteTransfer(ctx, transfer.Id, transfer.CompletedAt)
+	case core.PatternTransferRejected:
+		var transfer domain.TransferRejected
+		if err := json.Unmarshal(ev.Data, &transfer); err != nil {
+			return fmt.Errorf("unmarshal transfer rejected: %w", err)
+		}
+		return tx.RejectTransfer(ctx, transfer.Id, transfer.Reason, transfer.CompletedAt)
 	case core.PatternOrderBookUpdated:
 		return nil
 	default:

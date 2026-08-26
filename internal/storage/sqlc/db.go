@@ -27,6 +27,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.activateAccountStmt, err = db.PrepareContext(ctx, activateAccount); err != nil {
 		return nil, fmt.Errorf("error preparing query ActivateAccount: %w", err)
 	}
+	if q.completeTransferStmt, err = db.PrepareContext(ctx, completeTransfer); err != nil {
+		return nil, fmt.Errorf("error preparing query CompleteTransfer: %w", err)
+	}
 	if q.deleteHoldingStmt, err = db.PrepareContext(ctx, deleteHolding); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteHolding: %w", err)
 	}
@@ -47,6 +50,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.rejectOrderStmt, err = db.PrepareContext(ctx, rejectOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query RejectOrder: %w", err)
+	}
+	if q.rejectTransferStmt, err = db.PrepareContext(ctx, rejectTransfer); err != nil {
+		return nil, fmt.Errorf("error preparing query RejectTransfer: %w", err)
 	}
 	if q.saveDBAppliedCursorStmt, err = db.PrepareContext(ctx, saveDBAppliedCursor); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveDBAppliedCursor: %w", err)
@@ -85,6 +91,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing activateAccountStmt: %w", cerr)
 		}
 	}
+	if q.completeTransferStmt != nil {
+		if cerr := q.completeTransferStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing completeTransferStmt: %w", cerr)
+		}
+	}
 	if q.deleteHoldingStmt != nil {
 		if cerr := q.deleteHoldingStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteHoldingStmt: %w", cerr)
@@ -118,6 +129,11 @@ func (q *Queries) Close() error {
 	if q.rejectOrderStmt != nil {
 		if cerr := q.rejectOrderStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing rejectOrderStmt: %w", cerr)
+		}
+	}
+	if q.rejectTransferStmt != nil {
+		if cerr := q.rejectTransferStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing rejectTransferStmt: %w", cerr)
 		}
 	}
 	if q.saveDBAppliedCursorStmt != nil {
@@ -205,6 +221,7 @@ type Queries struct {
 	db                         DBTX
 	tx                         *sql.Tx
 	activateAccountStmt        *sql.Stmt
+	completeTransferStmt       *sql.Stmt
 	deleteHoldingStmt          *sql.Stmt
 	latestSnapshotStmt         *sql.Stmt
 	loadDBAppliedCursorStmt    *sql.Stmt
@@ -212,6 +229,7 @@ type Queries struct {
 	oldestSnapshotWalIndexStmt *sql.Stmt
 	pruneSnapshotsStmt         *sql.Stmt
 	rejectOrderStmt            *sql.Stmt
+	rejectTransferStmt         *sql.Stmt
 	saveDBAppliedCursorStmt    *sql.Stmt
 	saveMQPublishedCursorStmt  *sql.Stmt
 	saveSnapshotStmt           *sql.Stmt
@@ -228,6 +246,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		db:                         tx,
 		tx:                         tx,
 		activateAccountStmt:        q.activateAccountStmt,
+		completeTransferStmt:       q.completeTransferStmt,
 		deleteHoldingStmt:          q.deleteHoldingStmt,
 		latestSnapshotStmt:         q.latestSnapshotStmt,
 		loadDBAppliedCursorStmt:    q.loadDBAppliedCursorStmt,
@@ -235,6 +254,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		oldestSnapshotWalIndexStmt: q.oldestSnapshotWalIndexStmt,
 		pruneSnapshotsStmt:         q.pruneSnapshotsStmt,
 		rejectOrderStmt:            q.rejectOrderStmt,
+		rejectTransferStmt:         q.rejectTransferStmt,
 		saveDBAppliedCursorStmt:    q.saveDBAppliedCursorStmt,
 		saveMQPublishedCursorStmt:  q.saveMQPublishedCursorStmt,
 		saveSnapshotStmt:           q.saveSnapshotStmt,
