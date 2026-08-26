@@ -3,6 +3,7 @@
 // - 취소 요청 order.completed 이벤트를 COMPLETED 상태로 반영
 // - 두 주문 상태와 DB 적용 커서를 하나의 트랜잭션에서 커밋
 // - 정정 원주문 REPLACED와 대체 주문의 누적 수량·OPEN 상태를 하나의 트랜잭션에서 반영
+// - transfer.completed·transfer.rejected 이벤트를 송금 완료·거부 처리로 반영
 package publisher
 
 import (
@@ -149,4 +150,82 @@ func orderStatusOutputEvent(t *testing.T, pattern string, order domain.OrderEven
 		t.Fatalf("marshal %s event: %v", pattern, err)
 	}
 	return core.OutputEvent{Pattern: pattern, Data: data}
+}
+
+type transferRecordingTx struct {
+	Tx
+	completed []completedTransfer
+	rejected  []rejectedTransfer
+}
+
+type completedTransfer struct {
+	transferID  int64
+	completedAt time.Time
+}
+
+type rejectedTransfer struct {
+	transferID  int64
+	reason      string
+	completedAt time.Time
+}
+
+func (t *transferRecordingTx) CompleteTransfer(_ context.Context, transferID int64, completedAt time.Time) error {
+	t.completed = append(t.completed, completedTransfer{transferID, completedAt})
+	return nil
+}
+
+func (t *transferRecordingTx) RejectTransfer(_ context.Context, transferID int64, reason string, completedAt time.Time) error {
+	t.rejected = append(t.rejected, rejectedTransfer{transferID, reason, completedAt})
+	return nil
+}
+
+func TestApplyEventRoutesTransferCompletedAndRejected(t *testing.T) {
+	completedAt := time.Date(2026, 8, 25, 3, 4, 5, 0, time.UTC)
+	tx := &transferRecordingTx{}
+
+	completedEvent := transferOutputEvent(t, core.PatternTransferCompleted, domain.TransferCompleted{
+		Id: 11, SenderAccountId: 1, RecipientAccountId: 2, Amount: 300, CompletedAt: completedAt,
+	})
+	if err := applyEvent(context.Background(), tx, completedEvent); err != nil {
+		t.Fatalf("apply transfer completed: %v", err)
+	}
+	rejectedEvent := transferOutputEvent(t, core.PatternTransferRejected, domain.TransferRejected{
+		Id: 12, SenderAccountId: 1, RecipientAccountId: 9, Amount: 400,
+		Reason: string(core.TransferRejectInvalidRecipient), CompletedAt: completedAt,
+	})
+	if err := applyEvent(context.Background(), tx, rejectedEvent); err != nil {
+		t.Fatalf("apply transfer rejected: %v", err)
+	}
+
+	if len(tx.completed) != 1 {
+		t.Fatalf("completed transfers = %+v, want one", tx.completed)
+	}
+	if tx.completed[0].transferID != 11 {
+		t.Errorf("completed transfer id = %d, want 11", tx.completed[0].transferID)
+	}
+	if !tx.completed[0].completedAt.Equal(completedAt) {
+		t.Errorf("completed at = %s, want %s", tx.completed[0].completedAt, completedAt)
+	}
+
+	if len(tx.rejected) != 1 {
+		t.Fatalf("rejected transfers = %+v, want one", tx.rejected)
+	}
+	if tx.rejected[0].transferID != 12 {
+		t.Errorf("rejected transfer id = %d, want 12", tx.rejected[0].transferID)
+	}
+	if tx.rejected[0].reason != string(core.TransferRejectInvalidRecipient) {
+		t.Errorf("reject reason = %s, want %s", tx.rejected[0].reason, core.TransferRejectInvalidRecipient)
+	}
+	if !tx.rejected[0].completedAt.Equal(completedAt) {
+		t.Errorf("rejected completed at = %s, want %s", tx.rejected[0].completedAt, completedAt)
+	}
+}
+
+func transferOutputEvent(t *testing.T, pattern string, data any) core.OutputEvent {
+	t.Helper()
+	raw, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal transfer event: %v", err)
+	}
+	return core.OutputEvent{Pattern: pattern, Data: raw}
 }

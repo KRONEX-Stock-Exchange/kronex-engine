@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	ActivateAccount(ctx context.Context, id int32) error
+	CompleteTransfer(ctx context.Context, arg CompleteTransferParams) error
 	DeleteHolding(ctx context.Context, arg DeleteHoldingParams) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
 	LoadDBAppliedCursor(ctx context.Context) (int64, error)
@@ -17,6 +18,7 @@ type Querier interface {
 	OldestSnapshotWalIndex(ctx context.Context) (uint64, error)
 	PruneSnapshots(ctx context.Context, limit int32) error
 	RejectOrder(ctx context.Context, arg RejectOrderParams) error
+	RejectTransfer(ctx context.Context, arg RejectTransferParams) error
 	SaveDBAppliedCursor(ctx context.Context, index int64) error
 	SaveMQPublishedCursor(ctx context.Context, index int64) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error

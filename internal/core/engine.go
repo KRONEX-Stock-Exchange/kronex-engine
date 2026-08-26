@@ -17,8 +17,9 @@ import (
 
 const (
 	// Input WAL: 수신 메세지 종류
-	PatternOrderCreated   = "order.created"   // 주문
-	PatternAccountCreated = "account.created" // 계좌 등록
+	PatternOrderCreated    = "order.created"    // 주문
+	PatternAccountCreated  = "account.created"  // 계좌 등록
+	PatternTransferCreated = "transfer.created" // 계좌 간 송금
 
 	// Input WAL: 어드민 요청 종류
 	PatternStockList               = "stock.list"                 // 종목 상장 요청
@@ -26,19 +27,21 @@ const (
 	PatternAdminStockBalanceAdjust = "admin.stock_balance.adjust" // 보유 주식 잔고 증감 요청
 
 	// Output WAL: 발행 이벤트 종류
-	PatternTradeExecuted    = "trade.executed"    // 체결 내역
-	PatternOrderOpen        = "order.open"        // 호가창 등록(미체결/부분체결 잔량)
-	PatternOrderFilled      = "order.filled"      // 전량 체결
-	PatternOrderCanceled    = "order.canceled"    // 취소(시장가 미체결 잔량 등)
-	PatternOrderReplaced    = "order.replaced"    // 정정으로 대체된 기존 주문
-	PatternOrderCompleted   = "order.completed"   // 요청 처리 완료
-	PatternOrderRejected    = "order.rejected"    // 유효성 검사 실패로 거부
-	PatternAccountUpdated   = "account.updated"   // 계좌 잔고 변동
-	PatternAccountActivated = "account.activated" // 계좌 활성화
-	PatternHoldingUpdated   = "holding.updated"   // 보유종목 변동
-	PatternStockListed      = "stock.listed"      // 종목 상장 완료
-	PatternStockUpdated     = "stock.updated"     // 종목 현재가 변동
-	PatternOrderBookUpdated = "orderbook.updated" // 영향받은 호가 가격대의 최종 잔량
+	PatternTradeExecuted     = "trade.executed"     // 체결 내역
+	PatternOrderOpen         = "order.open"         // 호가창 등록(미체결/부분체결 잔량)
+	PatternOrderFilled       = "order.filled"       // 전량 체결
+	PatternOrderCanceled     = "order.canceled"     // 취소(시장가 미체결 잔량 등)
+	PatternOrderReplaced     = "order.replaced"     // 정정으로 대체된 기존 주문
+	PatternOrderCompleted    = "order.completed"    // 요청 처리 완료
+	PatternOrderRejected     = "order.rejected"     // 유효성 검사 실패로 거부
+	PatternAccountUpdated    = "account.updated"    // 계좌 잔고 변동
+	PatternAccountActivated  = "account.activated"  // 계좌 활성화
+	PatternHoldingUpdated    = "holding.updated"    // 보유종목 변동
+	PatternStockListed       = "stock.listed"       // 종목 상장 완료
+	PatternStockUpdated      = "stock.updated"      // 종목 현재가 변동
+	PatternOrderBookUpdated  = "orderbook.updated"  // 영향받은 호가 가격대의 최종 잔량
+	PatternTransferCompleted = "transfer.completed" // 송금 완료
+	PatternTransferRejected  = "transfer.rejected"  // 유효성 검사 실패로 거부된 송금
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -161,6 +164,12 @@ func (e *Engine) loadDedup() error {
 				return fmt.Errorf("unmarshal account %d: %w", i, err)
 			}
 			e.dedup.add(env.Pattern, int64(acc.Id))
+		case PatternTransferCreated:
+			var transfer domain.Transfer
+			if err := json.Unmarshal(env.Data, &transfer); err != nil {
+				return fmt.Errorf("unmarshal transfer %d: %w", i, err)
+			}
+			e.dedup.add(env.Pattern, transfer.Id)
 		case PatternStockList:
 			var stock domain.Stock
 			if err := json.Unmarshal(env.Data, &stock); err != nil {
@@ -189,6 +198,7 @@ func (e *Engine) Close() error {
 }
 
 // TODO: 유효 하지 않은 주문은 Replay 대상에서 제외하기
+// TODO: Replay시 송금, 체결시간이 재생되는 시간으로 복구되는 문제가 있음
 func (e *Engine) Replay(ctx context.Context) error {
 	// 최신 스냅샷 로드
 	var lastSnapshotIdx uint64
@@ -246,6 +256,15 @@ func (e *Engine) Replay(ctx context.Context) error {
 			}
 			e.inputSeq = i
 			e.activateAccount(acc)
+		case PatternTransferCreated:
+			var transfer domain.Transfer
+			if err := json.Unmarshal(env.Data, &transfer); err != nil {
+				return fmt.Errorf("unmarshal transfer %d: %w", i, err)
+			}
+			e.inputSeq = i
+			if err := e.applyTransfer(transfer); err != nil {
+				return fmt.Errorf("replay transfer %d: %w", i, err)
+			}
 		case PatternStockList:
 			var stock domain.Stock
 			if err := json.Unmarshal(env.Data, &stock); err != nil {
@@ -370,12 +389,6 @@ func (e *Engine) Run(ctx context.Context) error {
 		log.Printf("engine: boot cleanup output wal: %v", err)
 	}
 	log.Printf("wal cleanup: success")
-
-	// TEMP 프로덕션 확인용
-	inputIndex, _ := e.input.FirstIndex()
-	outputIndex, _ := e.output.FirstIndex()
-	log.Printf("input: %d", inputIndex)
-	log.Printf("output: %d", outputIndex)
 
 	deliveries, err := e.consumeAll(ctx)
 	if err != nil {

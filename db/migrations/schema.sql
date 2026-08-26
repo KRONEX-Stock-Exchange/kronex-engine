@@ -47,6 +47,32 @@ CREATE TABLE `accounts` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- =========================================================
+-- transfers (계좌 간 송금)
+-- =========================================================
+CREATE TABLE `transfers` (
+  `id`                   BIGINT          NOT NULL AUTO_INCREMENT,
+  `sender_account_id`    INT             NOT NULL,
+  `recipient_account_id` INT             NOT NULL,
+  `sender_alias`         VARCHAR(20)     NULL,
+  `amount`               BIGINT UNSIGNED NOT NULL,
+  `status`               ENUM('RECEIVED', 'REJECTED', 'COMPLETED') NOT NULL DEFAULT 'RECEIVED',
+  `reject_reason`        ENUM('INSUFFICIENT_BALANCE', 'INVALID_RECIPIENT', 'INVALID_SENDER', 'SENDER_NOT_ACTIVE', 'RECIPIENT_NOT_ACTIVE', 'SELF_TRANSFER', 'INVALID_REQUEST') NULL,
+  `published_at`         DATETIME(3)     NULL,
+  `completed_at`         DATETIME(3)     NULL,
+  `created_at`           DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_transfers_published_at` (`published_at`),
+  KEY `idx_transfers_sender_account_id` (`sender_account_id`),
+  KEY `idx_transfers_recipient_account_id` (`recipient_account_id`),
+  KEY `idx_transfers_sender_created` (`sender_account_id`, `created_at`),
+  KEY `idx_transfers_recipient_created` (`recipient_account_id`, `created_at`),
+  CONSTRAINT `fk_transfers_sender_account`
+    FOREIGN KEY (`sender_account_id`) REFERENCES `accounts` (`id`),
+  CONSTRAINT `fk_transfers_recipient_account`
+    FOREIGN KEY (`recipient_account_id`) REFERENCES `accounts` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- =========================================================
 -- stocks (주식 정보)
 -- =========================================================
 CREATE TABLE `stocks` (

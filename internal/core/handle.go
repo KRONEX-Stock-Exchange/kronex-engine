@@ -29,6 +29,8 @@ func (e *Engine) handleData(d Delivery) error {
 		return e.handleOrder(d, env.Data)
 	case PatternAccountCreated:
 		return e.handleAccountCreated(d, env.Data)
+	case PatternTransferCreated:
+		return e.handleTransferCreated(d, env.Data)
 	default:
 		log.Printf("engine: unknown data pattern %q", env.Pattern)
 		return d.Nack(false)
@@ -108,6 +110,36 @@ func (e *Engine) handleAccountCreated(d Delivery, data json.RawMessage) error {
 	e.dedup.add(PatternAccountCreated, int64(acc.Id))
 
 	e.activateAccount(acc)
+	return d.Ack()
+}
+
+func (e *Engine) handleTransferCreated(d Delivery, data json.RawMessage) error {
+	var transfer domain.Transfer
+	if err := json.Unmarshal(data, &transfer); err != nil {
+		log.Printf("engine: decode transfer: %v", err)
+		return d.Nack(false)
+	}
+	log.Printf("engine: received transfer %+v", transfer)
+
+	// 이미 처리한 송금이면 Ack 로 버림
+	if e.dedup.has(PatternTransferCreated, transfer.Id) {
+		log.Printf("engine: duplicate transfer id=%d, skip", transfer.Id)
+		return d.Ack()
+	}
+
+	// Input WAL 작성
+	idx, err := e.input.Append(d.Message.Payload)
+	if err != nil {
+		panic(fmt.Errorf("engine: append input wal: %w", err))
+	}
+	e.inputSeq = idx
+	e.dedup.add(PatternTransferCreated, transfer.Id)
+
+	if err := e.applyTransfer(transfer); err != nil {
+		log.Printf("engine: transfer %d: %v", transfer.Id, err)
+		return err
+	}
+
 	return d.Ack()
 }
 
