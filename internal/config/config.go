@@ -20,8 +20,7 @@ type RabbitMQ struct {
 	User          string
 	Password      string
 	PrefetchCount int
-	DataQueue     string // 데이터 수신 큐 (계좌 등록·송금·주문)
-	AdminQueue    string // 어드민 수신 큐 (상장·상폐·거래정지 등)
+	DataQueue     string // 요청 수신 큐 (계좌 등록·송금·주문·어드민)
 	EventQueue    string // 이벤트 발행 큐
 }
 
@@ -63,7 +62,6 @@ func Load() (Config, error) {
 			Password:      env("RABBITMQ_PASSWORD", "guest"),
 			PrefetchCount: rabbitMQPrefetchCount,
 			DataQueue:     "data_queue",
-			AdminQueue:    "admin_queue",
 			EventQueue:    "event_queue",
 		},
 		WAL: WAL{

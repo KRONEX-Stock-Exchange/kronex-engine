@@ -298,7 +298,6 @@ func newEditHandleTestEngine(t *testing.T) (*Engine, *wal.WAL) {
 		dedup:        newDedup(dedupWindow),
 		outputSignal: make(chan struct{}, 1),
 	}
-	e.routes = map[string]func(Delivery) error{"edit_data": e.handleData}
 	t.Cleanup(func() { _ = e.Close() })
 	return e, output
 }
@@ -338,7 +337,6 @@ func editTestDelivery(t *testing.T, order domain.Order) Delivery {
 		t.Fatalf("marshal edit envelope: %v", err)
 	}
 	return Delivery{
-		Queue:   "edit_data",
 		Message: domain.Message{RoutingKey: "edit_data", Payload: payload},
 		Ack:     func() error { return nil },
 		Nack:    func(bool) error { return nil },
