@@ -7,6 +7,7 @@ package sqlc
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -51,6 +52,141 @@ func (ns NullAccountsStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.AccountsStatus), nil
+}
+
+type AdminRequestsRejectReason string
+
+const (
+	AdminRequestsRejectReasonTARGETNOTFOUND      AdminRequestsRejectReason = "TARGET_NOT_FOUND"
+	AdminRequestsRejectReasonINVALIDSTATE        AdminRequestsRejectReason = "INVALID_STATE"
+	AdminRequestsRejectReasonINSUFFICIENTBALANCE AdminRequestsRejectReason = "INSUFFICIENT_BALANCE"
+	AdminRequestsRejectReasonINSUFFICIENTSTOCK   AdminRequestsRejectReason = "INSUFFICIENT_STOCK"
+	AdminRequestsRejectReasonINVALIDREQUEST      AdminRequestsRejectReason = "INVALID_REQUEST"
+)
+
+func (e *AdminRequestsRejectReason) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AdminRequestsRejectReason(s)
+	case string:
+		*e = AdminRequestsRejectReason(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AdminRequestsRejectReason: %T", src)
+	}
+	return nil
+}
+
+type NullAdminRequestsRejectReason struct {
+	AdminRequestsRejectReason AdminRequestsRejectReason `json:"admin_requests_reject_reason"`
+	Valid                     bool                      `json:"valid"` // Valid is true if AdminRequestsRejectReason is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAdminRequestsRejectReason) Scan(value interface{}) error {
+	if value == nil {
+		ns.AdminRequestsRejectReason, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AdminRequestsRejectReason.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAdminRequestsRejectReason) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AdminRequestsRejectReason), nil
+}
+
+type AdminRequestsStatus string
+
+const (
+	AdminRequestsStatusRECEIVED  AdminRequestsStatus = "RECEIVED"
+	AdminRequestsStatusCOMPLETED AdminRequestsStatus = "COMPLETED"
+	AdminRequestsStatusREJECTED  AdminRequestsStatus = "REJECTED"
+)
+
+func (e *AdminRequestsStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AdminRequestsStatus(s)
+	case string:
+		*e = AdminRequestsStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AdminRequestsStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAdminRequestsStatus struct {
+	AdminRequestsStatus AdminRequestsStatus `json:"admin_requests_status"`
+	Valid               bool                `json:"valid"` // Valid is true if AdminRequestsStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAdminRequestsStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.AdminRequestsStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AdminRequestsStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAdminRequestsStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AdminRequestsStatus), nil
+}
+
+type AdminRequestsType string
+
+const (
+	AdminRequestsTypeSTOCKSUSPEND    AdminRequestsType = "STOCK_SUSPEND"
+	AdminRequestsTypeSTOCKRESUME     AdminRequestsType = "STOCK_RESUME"
+	AdminRequestsTypeSTOCKDELIST     AdminRequestsType = "STOCK_DELIST"
+	AdminRequestsTypeACCOUNTDEPOSIT  AdminRequestsType = "ACCOUNT_DEPOSIT"
+	AdminRequestsTypeACCOUNTWITHDRAW AdminRequestsType = "ACCOUNT_WITHDRAW"
+	AdminRequestsTypeSTOCKDEPOSIT    AdminRequestsType = "STOCK_DEPOSIT"
+	AdminRequestsTypeSTOCKWITHDRAW   AdminRequestsType = "STOCK_WITHDRAW"
+)
+
+func (e *AdminRequestsType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AdminRequestsType(s)
+	case string:
+		*e = AdminRequestsType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AdminRequestsType: %T", src)
+	}
+	return nil
+}
+
+type NullAdminRequestsType struct {
+	AdminRequestsType AdminRequestsType `json:"admin_requests_type"`
+	Valid             bool              `json:"valid"` // Valid is true if AdminRequestsType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAdminRequestsType) Scan(value interface{}) error {
+	if value == nil {
+		ns.AdminRequestsType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AdminRequestsType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAdminRequestsType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AdminRequestsType), nil
 }
 
 type CandlesType string
@@ -231,7 +367,6 @@ const (
 	OrdersRejectReasonINVALIDORDER        OrdersRejectReason = "INVALID_ORDER"
 	OrdersRejectReasonINSUFFICIENTBALANCE OrdersRejectReason = "INSUFFICIENT_BALANCE"
 	OrdersRejectReasonINSUFFICIENTSTOCK   OrdersRejectReason = "INSUFFICIENT_STOCK"
-	OrdersRejectReasonPRICEOUTOFLIMIT     OrdersRejectReason = "PRICE_OUT_OF_LIMIT"
 	OrdersRejectReasonSTOCKNOTTRADABLE    OrdersRejectReason = "STOCK_NOT_TRADABLE"
 	OrdersRejectReasonORDERNOTACTIVE      OrdersRejectReason = "ORDER_NOT_ACTIVE"
 )
@@ -547,6 +682,18 @@ type Account struct {
 	Status           AccountsStatus `json:"status"`
 	PublishedAt      sql.NullTime   `json:"published_at"`
 	CreatedAt        time.Time      `json:"created_at"`
+}
+
+type AdminRequest struct {
+	ID           int64                         `json:"id"`
+	Type         AdminRequestsType             `json:"type"`
+	Payload      json.RawMessage               `json:"payload"`
+	Status       AdminRequestsStatus           `json:"status"`
+	RejectReason NullAdminRequestsRejectReason `json:"reject_reason"`
+	RequestedBy  int32                         `json:"requested_by"`
+	PublishedAt  sql.NullTime                  `json:"published_at"`
+	CompletedAt  sql.NullTime                  `json:"completed_at"`
+	CreatedAt    time.Time                     `json:"created_at"`
 }
 
 type Candle struct {
