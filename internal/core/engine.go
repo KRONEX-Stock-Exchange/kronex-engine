@@ -20,11 +20,11 @@ const (
 	PatternOrderCreated    = "order.created"    // 주문
 	PatternAccountCreated  = "account.created"  // 계좌 등록
 	PatternTransferCreated = "transfer.created" // 계좌 간 송금
+	PatternStockList       = "stock.list"       // 종목 상장 요청
 
 	// Input WAL: 어드민 요청 종류
-	PatternStockList               = "stock.list"                 // 종목 상장 요청
-	PatternAdminBalanceAdjust      = "admin.balance.adjust"       // 잔액 증감 요청
-	PatternAdminStockBalanceAdjust = "admin.stock_balance.adjust" // 보유 주식 잔고 증감 요청
+	PatternAdminBalanceAdjust      = "admin.account.balance.adjust" // 잔액 증감 요청
+	PatternAdminStockBalanceAdjust = "admin.stock.balance.adjust"   // 보유 주식 잔고 증감 요청
 
 	// Output WAL: 발행 이벤트 종류
 	PatternTradeExecuted     = "trade.executed"     // 체결 내역
