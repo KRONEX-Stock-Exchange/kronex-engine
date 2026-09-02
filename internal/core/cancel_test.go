@@ -229,7 +229,6 @@ func newCancelHandleTestEngine(t *testing.T) (*Engine, *wal.WAL) {
 		dedup:        newDedup(dedupWindow),
 		outputSignal: make(chan struct{}, 1),
 	}
-	e.routes = map[string]func(Delivery) error{"cancel_data": e.handleData}
 	t.Cleanup(func() { _ = e.Close() })
 	return e, output
 }
@@ -258,7 +257,6 @@ func cancelTestDelivery(t *testing.T, order domain.Order) Delivery {
 		t.Fatalf("marshal cancel envelope: %v", err)
 	}
 	return Delivery{
-		Queue: "cancel_data",
 		Message: domain.Message{
 			RoutingKey: "cancel_data",
 			Payload:    payload,

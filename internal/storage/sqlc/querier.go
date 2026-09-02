@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	ActivateAccount(ctx context.Context, id int32) error
+	CompleteAdminRequest(ctx context.Context, arg CompleteAdminRequestParams) error
 	CompleteTransfer(ctx context.Context, arg CompleteTransferParams) error
 	DeleteHolding(ctx context.Context, arg DeleteHoldingParams) error
 	LatestSnapshot(ctx context.Context) (LatestSnapshotRow, error)
@@ -17,6 +18,7 @@ type Querier interface {
 	LoadMQPublishedCursor(ctx context.Context) (int64, error)
 	OldestSnapshotWalIndex(ctx context.Context) (uint64, error)
 	PruneSnapshots(ctx context.Context, limit int32) error
+	RejectAdminRequest(ctx context.Context, arg RejectAdminRequestParams) error
 	RejectOrder(ctx context.Context, arg RejectOrderParams) error
 	RejectTransfer(ctx context.Context, arg RejectTransferParams) error
 	SaveDBAppliedCursor(ctx context.Context, index int64) error

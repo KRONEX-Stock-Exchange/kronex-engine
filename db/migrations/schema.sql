@@ -73,6 +73,27 @@ CREATE TABLE `transfers` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- =========================================================
+-- admin_requests (어드민 요청)
+-- =========================================================
+CREATE TABLE `admin_requests` (
+  `id`            BIGINT      NOT NULL AUTO_INCREMENT,
+  `type`          ENUM('STOCK_SUSPEND', 'STOCK_RESUME', 'STOCK_DELIST', 'ACCOUNT_DEPOSIT', 'ACCOUNT_WITHDRAW', 'STOCK_DEPOSIT', 'STOCK_WITHDRAW') NOT NULL,
+  `payload`       JSON        NOT NULL,
+  `status`        ENUM('RECEIVED', 'COMPLETED', 'REJECTED') NOT NULL DEFAULT 'RECEIVED',
+  `reject_reason` ENUM('TARGET_NOT_FOUND', 'INVALID_STATE', 'INSUFFICIENT_BALANCE', 'INSUFFICIENT_STOCK', 'INVALID_REQUEST') NULL,
+  `requested_by`  INT         NOT NULL,
+  `published_at`  DATETIME(3) NULL,
+  `completed_at`  DATETIME(3) NULL,
+  `created_at`    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_admin_requests_published_at` (`published_at`),
+  KEY `idx_admin_requests_type_status_created` (`type`, `status`, `created_at`),
+  KEY `idx_admin_requests_requested_by` (`requested_by`),
+  CONSTRAINT `fk_admin_requests_user`
+    FOREIGN KEY (`requested_by`) REFERENCES `users` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- =========================================================
 -- stocks (주식 정보)
 -- =========================================================
 CREATE TABLE `stocks` (
@@ -138,7 +159,7 @@ CREATE TABLE `orders` (
   `filled_quantity` BIGINT UNSIGNED NOT NULL,
   `order_type`      ENUM('LIMIT', 'MARKET') NOT NULL,
   `status`          ENUM('RECEIVED', 'OPEN', 'FILLED', 'CANCELED', 'REPLACED', 'REJECTED', 'COMPLETED') NOT NULL DEFAULT 'RECEIVED',
-  `reject_reason`   ENUM('INVALID_ORDER', 'INSUFFICIENT_BALANCE', 'INSUFFICIENT_STOCK', 'PRICE_OUT_OF_LIMIT', 'STOCK_NOT_TRADABLE', 'ORDER_NOT_ACTIVE') NULL,
+  `reject_reason`   ENUM('INVALID_ORDER', 'INSUFFICIENT_BALANCE', 'INSUFFICIENT_STOCK', 'STOCK_NOT_TRADABLE', 'ORDER_NOT_ACTIVE') NULL,
   `trading_type`    ENUM('BUY', 'SELL', 'EDIT', 'CANCEL') NOT NULL,
   `cancel_reason`   ENUM('USER', 'SYSTEM') NULL,
   `published_at`    DATETIME(3)     NULL,

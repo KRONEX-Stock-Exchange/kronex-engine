@@ -100,8 +100,6 @@ func newBenchEngine(b *testing.B) *Engine {
 		snapshots:    make(chan snapshotData, 1),
 		outputSignal: make(chan struct{}, 1),
 	}
-	// benchDelivery가 사용하는 queue 이름을 data plane handler에 연결한다.
-	e.routes = map[string]func(Delivery) error{"bench_data": e.handleData}
 	b.Cleanup(func() {
 		_ = e.Close()
 	})
@@ -152,7 +150,6 @@ func benchDelivery(pattern string, payload []byte) Delivery {
 		panic(err)
 	}
 	return Delivery{
-		Queue: "bench_data",
 		Message: domain.Message{
 			RoutingKey: "bench_data",
 			Payload:    env,

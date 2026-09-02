@@ -8,8 +8,6 @@ import (
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
 )
 
-// 송금 거부 사유 (transfers.reject_reason ENUM 과 같은 값 집합)
-// NOTE: 주문의 RejectReason 과 값 집합이 달라 별도 타입으로 분리한다. 두 타입을 섞어 쓰면 안 된다.
 type TransferRejectReason string
 
 const (
@@ -36,7 +34,6 @@ func transferReject(reason TransferRejectReason, format string, a ...any) *Trans
 	return &TransferRejectError{Reason: reason, err: fmt.Errorf(format, a...)}
 }
 
-// err에서 거부 사유 추출 (타입 불명 시 INVALID_REQUEST)
 func transferRejectReasonOf(err error) TransferRejectReason {
 	var re *TransferRejectError
 	if errors.As(err, &re) {

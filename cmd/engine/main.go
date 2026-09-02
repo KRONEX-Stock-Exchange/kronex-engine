@@ -47,10 +47,7 @@ func main() {
 	// 엔진
 	snapStore := storage.NewSnapshotStore(db)
 	eventStore := storage.NewEventStore(db)
-	engine, err := core.NewEngine(mq, snapStore, eventStore, map[string]core.Plane{
-		cfg.RabbitMQ.DataQueue:  core.PlaneData,
-		cfg.RabbitMQ.AdminQueue: core.PlaneAdmin,
-	})
+	engine, err := core.NewEngine(mq, snapStore, eventStore, cfg.RabbitMQ.DataQueue)
 	if err != nil {
 		log.Fatalf("create engine: %v", err)
 	}
@@ -72,7 +69,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("engine consuming queues %q, %q", cfg.RabbitMQ.DataQueue, cfg.RabbitMQ.AdminQueue)
+	log.Printf("engine consuming queue %q", cfg.RabbitMQ.DataQueue)
 	if err := engine.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Printf("engine stopped: %v", err)
 	}

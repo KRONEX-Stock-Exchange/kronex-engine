@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/KRONEX-Stock-Exchange/kronex-engine/internal/domain"
@@ -20,11 +19,11 @@ const (
 	PatternOrderCreated    = "order.created"    // 주문
 	PatternAccountCreated  = "account.created"  // 계좌 등록
 	PatternTransferCreated = "transfer.created" // 계좌 간 송금
+	PatternStockList       = "stock.list"       // 종목 상장 요청
 
 	// Input WAL: 어드민 요청 종류
-	PatternStockList               = "stock.list"                 // 종목 상장 요청
-	PatternAdminBalanceAdjust      = "admin.balance.adjust"       // 잔액 증감 요청
-	PatternAdminStockBalanceAdjust = "admin.stock_balance.adjust" // 보유 주식 잔고 증감 요청
+	PatternAdminBalanceAdjust      = "admin.account.balance.adjust" // 잔액 증감 요청
+	PatternAdminStockBalanceAdjust = "admin.stock.balance.adjust"   // 보유 주식 잔고 증감 요청
 
 	// Output WAL: 발행 이벤트 종류
 	PatternTradeExecuted     = "trade.executed"     // 체결 내역
@@ -42,6 +41,9 @@ const (
 	PatternOrderBookUpdated  = "orderbook.updated"  // 영향받은 호가 가격대의 최종 잔량
 	PatternTransferCompleted = "transfer.completed" // 송금 완료
 	PatternTransferRejected  = "transfer.rejected"  // 유효성 검사 실패로 거부된 송금
+
+	PatternAdminRequestCompleted = "admin.request.completed" // 어드민 요청 처리 완료
+	PatternAdminRequestRejected  = "admin.request.rejected"  // 어드민 요청 유효성 검사 실패로 거부
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -53,16 +55,9 @@ type snapshotData struct {
 	inputSeq uint64
 }
 
-type Plane int
-
-const (
-	PlaneData  Plane = iota // 일반 요청 (계좌 등록·송금·주문)
-	PlaneAdmin              // 어드민 요청 (상장·상폐·거래정지 등)
-)
-
 type Engine struct {
 	con      Consumer
-	routes   map[string]func(Delivery) error // 수신 큐 → 플레인 핸들러
+	queue    string // 요청 수신 큐 이름
 	input    *wal.WAL
 	output   *wal.WAL
 	state    *ledger.State
@@ -77,7 +72,7 @@ type Engine struct {
 	outputSignal     chan struct{}     // Output WAL 새 레코드 알림 → 퍼블리셔 깨우기 (cap 1)
 }
 
-func NewEngine(con Consumer, store SnapshotStore, tradeIDs TradeIDStore, queues map[string]Plane) (*Engine, error) {
+func NewEngine(con Consumer, store SnapshotStore, tradeIDs TradeIDStore, queue string) (*Engine, error) {
 	input, err := wal.Open("./data/wal/input", nil)
 	if err != nil {
 		return nil, fmt.Errorf("open input wal: %w", err)
@@ -90,6 +85,7 @@ func NewEngine(con Consumer, store SnapshotStore, tradeIDs TradeIDStore, queues 
 
 	e := &Engine{
 		con:          con,
+		queue:        queue,
 		input:        input,
 		output:       output,
 		state:        ledger.NewState(),
@@ -98,19 +94,6 @@ func NewEngine(con Consumer, store SnapshotStore, tradeIDs TradeIDStore, queues 
 		dedup:        newDedup(dedupWindow),
 		snapshots:    make(chan snapshotData, 1),
 		outputSignal: make(chan struct{}, 1),
-	}
-
-	// 큐 → 플레인 핸들러 라우팅 테이블 구성
-	e.routes = make(map[string]func(Delivery) error, len(queues))
-	for name, plane := range queues {
-		switch plane {
-		case PlaneData:
-			e.routes[name] = e.handleData
-		case PlaneAdmin:
-			e.routes[name] = e.handleAdmin
-		default:
-			return nil, fmt.Errorf("unknown plane %d for queue %q", plane, name)
-		}
 	}
 
 	// 기존 Output WAL 에서 복구 워터마크 적재
@@ -278,18 +261,14 @@ func (e *Engine) Replay(ctx context.Context) error {
 				return fmt.Errorf("unmarshal balance adjust %d: %w", i, err)
 			}
 			e.inputSeq = i
-			if _, err := e.applyBalanceAdjust(req); err != nil {
-				return fmt.Errorf("replay balance adjust %d: %w", i, err)
-			}
+			e.applyBalanceAdjust(req)
 		case PatternAdminStockBalanceAdjust:
 			var req domain.StockBalanceAdjust
 			if err := json.Unmarshal(env.Data, &req); err != nil {
 				return fmt.Errorf("unmarshal stock balance adjust %d: %w", i, err)
 			}
 			e.inputSeq = i
-			if _, err := e.applyStockBalanceAdjust(req); err != nil {
-				return fmt.Errorf("replay stock balance adjust %d: %w", i, err)
-			}
+			e.applyStockBalanceAdjust(req)
 		}
 	}
 
@@ -390,15 +369,15 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 	log.Printf("wal cleanup: success")
 
-	deliveries, err := e.consumeAll(ctx)
-	if err != nil {
-		return err
-	}
-
 	// 스냅샷 워커
 	snapshotTick := time.NewTicker(snapshotInterval)
 	defer snapshotTick.Stop()
 	go e.runSnapshotSaver(ctx)
+
+	deliveries, err := e.con.Deliveries(ctx, e.queue)
+	if err != nil {
+		return fmt.Errorf("consume %q: %w", e.queue, err)
+	}
 
 	for {
 		select {
@@ -417,46 +396,6 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// 구독 중인 모든 큐의 delivery 채널을 하나로 머지
-func (e *Engine) consumeAll(ctx context.Context) (<-chan Delivery, error) {
-	merged := make(chan Delivery)
-	var wg sync.WaitGroup
-
-	for q := range e.routes {
-		ch, err := e.con.Deliveries(ctx, q)
-		if err != nil {
-			return nil, fmt.Errorf("consume %q: %w", q, err)
-		}
-		wg.Add(1)
-		go func(q string, ch <-chan Delivery) {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case d, ok := <-ch:
-					if !ok {
-						return
-					}
-					d.Queue = q // 출처 큐 태깅
-					select {
-					case merged <- d:
-					case <-ctx.Done():
-						return
-					}
-				}
-			}
-		}(q, ch)
-	}
-
-	go func() {
-		wg.Wait()
-		close(merged)
-	}()
-
-	return merged, nil
 }
 
 func (e *Engine) snapshot() error {

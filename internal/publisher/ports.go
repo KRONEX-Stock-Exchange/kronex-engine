@@ -29,6 +29,8 @@ type Tx interface {
 	DeleteHolding(ctx context.Context, accountID, stockID int32) error
 	CompleteTransfer(ctx context.Context, transferID int64, completedAt time.Time) error
 	RejectTransfer(ctx context.Context, transferID int64, reason string, completedAt time.Time) error
+	CompleteAdminRequest(ctx context.Context, requestID int64, completedAt time.Time) error
+	RejectAdminRequest(ctx context.Context, requestID int64, reason string, completedAt time.Time) error
 	SaveDBAppliedCursor(ctx context.Context, index uint64) error
 	Commit() error
 	Rollback() error
