@@ -233,6 +233,32 @@ func (t *eventTx) RejectTransfer(ctx context.Context, transferID int64, reason s
 	return nil
 }
 
+// 어드민 요청 완료 처리 (status = COMPLETED)
+func (t *eventTx) CompleteAdminRequest(ctx context.Context, requestID int64, completedAt time.Time) error {
+	if err := t.q.CompleteAdminRequest(ctx, sqlc.CompleteAdminRequestParams{
+		CompletedAt: sql.NullTime{Time: completedAt, Valid: true},
+		ID:          requestID,
+	}); err != nil {
+		return fmt.Errorf("complete admin request %d: %w", requestID, err)
+	}
+	return nil
+}
+
+// 어드민 요청 거부 처리 (status = REJECTED)
+func (t *eventTx) RejectAdminRequest(ctx context.Context, requestID int64, reason string, completedAt time.Time) error {
+	if err := t.q.RejectAdminRequest(ctx, sqlc.RejectAdminRequestParams{
+		RejectReason: sqlc.NullAdminRequestsRejectReason{
+			AdminRequestsRejectReason: sqlc.AdminRequestsRejectReason(reason),
+			Valid:                     true,
+		},
+		CompletedAt: sql.NullTime{Time: completedAt, Valid: true},
+		ID:          requestID,
+	}); err != nil {
+		return fmt.Errorf("reject admin request %d: %w", requestID, err)
+	}
+	return nil
+}
+
 func (t *eventTx) Commit() error {
 	return t.tx.Commit()
 }

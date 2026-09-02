@@ -195,6 +195,18 @@ func applyEvent(ctx context.Context, tx Tx, ev core.OutputEvent) error {
 			return fmt.Errorf("unmarshal transfer rejected: %w", err)
 		}
 		return tx.RejectTransfer(ctx, transfer.Id, transfer.Reason, transfer.CompletedAt)
+	case core.PatternAdminRequestCompleted:
+		var req domain.AdminRequestCompleted
+		if err := json.Unmarshal(ev.Data, &req); err != nil {
+			return fmt.Errorf("unmarshal admin request completed: %w", err)
+		}
+		return tx.CompleteAdminRequest(ctx, req.Id, req.CompletedAt)
+	case core.PatternAdminRequestRejected:
+		var req domain.AdminRequestRejected
+		if err := json.Unmarshal(ev.Data, &req); err != nil {
+			return fmt.Errorf("unmarshal admin request rejected: %w", err)
+		}
+		return tx.RejectAdminRequest(ctx, req.Id, req.Reason, req.CompletedAt)
 	case core.PatternOrderBookUpdated:
 		return nil
 	default:

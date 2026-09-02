@@ -41,6 +41,9 @@ const (
 	PatternOrderBookUpdated  = "orderbook.updated"  // 영향받은 호가 가격대의 최종 잔량
 	PatternTransferCompleted = "transfer.completed" // 송금 완료
 	PatternTransferRejected  = "transfer.rejected"  // 유효성 검사 실패로 거부된 송금
+
+	PatternAdminRequestCompleted = "admin.request.completed" // 어드민 요청 처리 완료
+	PatternAdminRequestRejected  = "admin.request.rejected"  // 어드민 요청 유효성 검사 실패로 거부
 )
 
 const dedupWindow = 8192                 // 중복 방지 윈도우 크기
@@ -258,18 +261,14 @@ func (e *Engine) Replay(ctx context.Context) error {
 				return fmt.Errorf("unmarshal balance adjust %d: %w", i, err)
 			}
 			e.inputSeq = i
-			if _, err := e.applyBalanceAdjust(req); err != nil {
-				return fmt.Errorf("replay balance adjust %d: %w", i, err)
-			}
+			e.applyBalanceAdjust(req)
 		case PatternAdminStockBalanceAdjust:
 			var req domain.StockBalanceAdjust
 			if err := json.Unmarshal(env.Data, &req); err != nil {
 				return fmt.Errorf("unmarshal stock balance adjust %d: %w", i, err)
 			}
 			e.inputSeq = i
-			if _, err := e.applyStockBalanceAdjust(req); err != nil {
-				return fmt.Errorf("replay stock balance adjust %d: %w", i, err)
-			}
+			e.applyStockBalanceAdjust(req)
 		}
 	}
 
